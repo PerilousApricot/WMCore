@@ -65,10 +65,18 @@ class WorkflowManagerTest(unittest.TestCase):
         Get defaults WorkflowManager parameters
         """
 
-        return self.testInit.getConfiguration(
-                    os.path.join(WMCore.WMInit.getWMBASE(), \
-           'src/python/WMComponent/WorkflowManager/DefaultConfig.py'))
+        config = self.testInit.getConfiguration()
+        config.component_("WorkflowManager")
+        config.WorkflowManager.logLevel = "INFO"
+        config.WorkflowManager.componentName = "WorkflowManager"
+        config.WorkflowManager.componentDir = \
 
+        # The maximum number of threads to process each message type
+        config.WorkflowManager.maxThreads = 10
+
+        # The poll interval at which to look for new filesets
+        config.WorkflowManager.pollInterval = 60
+        return config
 
     def testA(self):
         """

@@ -50,9 +50,9 @@ def myproxy(base=None):
     if not base:
         port = cherrypy.request.local.port
         if port == 80:
-            base = 'localhost'
+            base = '127.0.0.1'
         else:
-            base = 'localhost:%s' % port
+            base = '127.0.0.1:%s' % port
 
     base = base.split(',')[0].strip()
     if base.find("://") == -1:
@@ -396,8 +396,8 @@ class Root(Harness):
         """
         Stop the server
         """
-        cherrypy.engine.exit()
         cherrypy.engine.stop()
+        cherrypy.engine.exit()
 
         # Ensure the next server that's started gets fresh objects
         for name, server in getattr(cherrypy, 'servers', {}).items():

@@ -73,15 +73,11 @@ class ProcessorTest(unittest.TestCase):
                 os.remove(f)    
         if hasattr(self, "testInit"):
             self.testInit.tearDownCouch()
-        if hasattr(self, "receiver"):
-            # wait until the Receiver is shut by the Shutdown control
-            # message which the worker() function should have sent
-            while self.receiver.isReady():
-                logging.info("tearDown: Waiting for Receiver shutdown ...")
-                time.sleep(ReceiverLogic.TIMEOUT_AFTER_SHUTDOWN * 1.1)
-                if self.receiver.isReady():
-                    self.receiver.shutdown()
-            logging.info("tearDown: Is the Receiver shut down: %s" % (not self.receiver.isReady()))
+        
+        if hasattr(self, "rec"):
+            while self.rec.isReady():
+                time.sleep(0.3)
+                print "%s waiting for Receiver to shut ..." % inspect.stack()[0][3]
 
                 
     def testProcessorBasic(self):
@@ -95,18 +91,14 @@ class ProcessorTest(unittest.TestCase):
         
         """
         processor = Processor(self.config.AlertProcessor)
-        # Receiver is waited for shutdown / shutdown explicitly in tearDown()        
-        self.receiver = Receiver(self.addr, processor, self.ctrl)
-        self.receiver.startReceiver() # non-blocking call
-
+        self.rec = Receiver(self.addr, processor, self.ctrl)
+        self.rec.startReceiver() # non-blocking call
+        
         # now sender tests control messages (register, unregister, shutdown)
         s = Sender(self.addr, self.ctrl, "Processor_t")
         s.register()
         s.unregister()
         s.sendShutdown()
-        # give some time so that the previous call shuts down the receiver
-        time.sleep(ReceiverLogic.TIMEOUT_AFTER_SHUTDOWN * 1.1)
-        
             
     def testProcessorWithReceiverAndFileSink(self):
         # add corresponding part of the configuration for FileSink(s)
@@ -118,21 +110,14 @@ class ProcessorTest(unittest.TestCase):
         config.soft.sinks.file.outputfile = self.softOutputFile
         
         processor = Processor(config)
-        # Receiver is waited for shutdown / shutdown explicitly in tearDown()
-        self.receiver = Receiver(self.addr, processor, self.ctrl)
-        self.receiver.startReceiver() # non blocking call
+        self.rec = Receiver(self.addr, processor, self.ctrl)
+        self.rec.startReceiver() # non blocking call
         
         # run worker(), this time directly without Process as above,
         # worker will send 10 Alerts to Receiver
         worker(self.addr, self.ctrl, 10)
-        
-        # wait until Receiver is shut down (by a message from worker(), then all
-        # alerts shall be delivered and could proceed to check if successfully delivered
-        while self.receiver.isReady():
-            time.sleep(ReceiverLogic.TIMEOUT_AFTER_SHUTDOWN * 1.5)
-            logging.info("%s: Waiting for Receiver shutdown ..." % inspect.stack()[0][3])
-        
-        # check the FileSink output files for content:
+            
+        # now check the FileSink output files for content:
         # the soft Alerts has threshold level set to 0 so Alerts
         # with level 1 and higher, resp. for critical the level
         # was above set to 5 so 6 and higher out of worker's 0 .. 9
@@ -168,24 +153,13 @@ class ProcessorTest(unittest.TestCase):
 
         # just send the Alert into couch
         processor = Processor(config)
-        # Receiver is waited for shutdown / shutdown explicitly in tearDown()
-        self.receiver = Receiver(self.addr, processor, self.ctrl)
-        self.receiver.startReceiver() # non blocking call
-        
-        
+        self.rec = Receiver(self.addr, processor, self.ctrl)
+        self.rec.startReceiver() # non blocking call
         
         # run worker(), this time directly without Process as above,
         # worker will send 10 Alerts to Receiver
         worker(self.addr, self.ctrl, 10)
 
-        # wait until Receiver is shut down (by a message from worker()
-        # also need to wait, otherwise tearDown kicks off and scrapes the
-        # couch so half of the alerts will be undelivered
-        
-        while self.receiver.isReady():
-            time.sleep(ReceiverLogic.TIMEOUT_AFTER_SHUTDOWN * 1.5)
-            logging.info("%s: Waiting for Receiver shutdown ..." % inspect.stack()[0][3])
-                            
             
 if __name__ == "__main__":
     unittest.main()

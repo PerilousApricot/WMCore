@@ -398,6 +398,12 @@ class Root(Harness):
         """
         cherrypy.engine.stop()
         cherrypy.engine.exit()
+        
+        # Ensure the next server that's started gets fresh objects
+        for name, server in getattr(cherrypy, 'servers', {}).items():
+            server.unsubscribe()
+            del cherrypy.servers[name]
+        
 
         # Ensure the next server that's started gets fresh objects
         for name, server in getattr(cherrypy, 'servers', {}).items():

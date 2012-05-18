@@ -11,7 +11,6 @@ import unittest
 import time
 import pickle
 import threading
-import hashlib
 
 # pylint and coverage aren't standard, but aren't strictly necessary
 # you should get them though
@@ -96,13 +95,12 @@ if can_nose:
         will replace os._exit() and throw an exception instead
         """
         if hasattr( threading.local(), "isMain" ) and threading.local().isMain:
-            # The main thread should raise an exception
-            sys.stderr.write("*******EXIT WAS TRAPPED**********\n")
-            raise RuntimeError, "os._exit() was called in the main thread"
-        else:        
-            # os._exit on child threads should just blow away the thread
-            raise SystemExit, "os._exit() was called in a child thread. " +\
-                              "Protecting the interpreter and trapping it"
+            # only trap the main thread
+            print "*******EXIT WAS TRAPPED**********"
+            raise RuntimeError, "os._exit() was called, we trapped it for testing"
+        else:
+            # subthreads can behave the same
+            os.DMWM_REAL_EXIT( code )
 
     class DetailedOutputter(Plugin):
         name = "detailed"

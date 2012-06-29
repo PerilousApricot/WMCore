@@ -4,12 +4,12 @@
 _ErrorHandler_
 
 The error handler pools for error conditions
-(CreateFailed, SubmitFailed, and JobFailed)
+(CreateFailed, SubmitFailed, JobFailed, and ASOFailed)
 By looking at wmbs_job table's status filed.
 All the jobs are handled respectively.
 
 the different failure handlers are configurable in the config file and 
-relate to the three stages of a job: create, submit, run 
+relate to the four stages of a job: create, submit, run, aso 
 
 The component runs in Poll mode, basically submits itself
 'Poll' message at the end of each cycle, so that it keeps polling
@@ -33,10 +33,10 @@ class ErrorHandler(Harness):
     """
     _ErrorHandler_
 
-    The error handler pools for error conditions (CreateFailed, SubmitFailed, and JobFailed)
+    The error handler pools for error conditions (CreateFailed, SubmitFailed, JobFailed, ASOFailed)
     By looking at wmbs_job table's status filed.
     All the errors are handled respectively by handlers related to 
-    the three stages of a job: create, submit, run 
+    the four stages of a job: create, submit, run , aso
     """
 
     def __init__(self, config):

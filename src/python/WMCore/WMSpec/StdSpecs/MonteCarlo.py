@@ -74,11 +74,20 @@ class MonteCarloWorkloadFactory(StdBase):
         prodTask = workload.newTask("Production")
 
         outputMods = self.setupProcessingTask(prodTask, "Production", None,
-                                              couchURL = self.couchURL, couchDBName = self.couchDBName,
-                                              configDoc = self.prodConfigCacheID, splitAlgo = self.prodJobSplitAlgo,
+                                              couchURL = self.couchURL,
+                                              couchDBName = self.couchDBName,
+                                              configDoc = self.prodConfigCacheID,
+                                              splitAlgo = self.prodJobSplitAlgo,
                                               splitArgs = self.prodJobSplitArgs,
-                                              seeding = self.seeding, totalEvents = self.totalEvents,
-                                              eventsPerLumi = self.eventsPerLumi)
+                                              seeding = self.seeding, 
+                                              totalEvents = self.totalEvents,
+                                              eventsPerLumi = self.eventsPerLumi,
+                                              userSandbox = self.userSandbox, 
+                                              userFiles = self.userFiles,
+                                              userDN = self.owner_dn, 
+                                              asyncDest = self.asyncDest,
+                                              owner_vogroup = self.owner_vogroup,
+                                              owner_vorole = self.owner_vorole)
         self.addLogCollectTask(prodTask)
         
         # pile up support

@@ -17,6 +17,7 @@ import threading
 import logging
 import gc
 import collections
+import string
 
 from WMCore.Agent.Configuration  import Configuration
 from WMCore.FwkJobReport.Report  import Report
@@ -102,6 +103,7 @@ class AccountantWorker(WMConnectionBase):
         self.listOfJobsToSave  = []
         self.listOfJobsToFail  = []
         self.filesetAssoc      = []
+        self.listOfJobsNeedingASO = []
         self.count = 0
         self.datasetAlgoID     = collections.deque(maxlen = 1000)
         self.datasetAlgoPaths  = collections.deque(maxlen = 1000)
@@ -111,7 +113,7 @@ class AccountantWorker(WMConnectionBase):
 
         self.phedex = PhEDEx()
         self.locLists = self.phedex.getNodeMap()
-
+        self.config = config
 
         return
 
@@ -121,13 +123,14 @@ class AccountantWorker(WMConnectionBase):
 
         Reset all global vars between runs.
         """
-        self.dbsFilesToCreate  = []
-        self.wmbsFilesToBuild  = []
-        self.fileLocation      = None
-        self.mergedOutputFiles = []
-        self.listOfJobsToSave  = []
-        self.listOfJobsToFail  = []
-        self.filesetAssoc      = []
+        self.dbsFilesToCreate     = []
+        self.wmbsFilesToBuild     = []
+        self.fileLocation         = None
+        self.mergedOutputFiles    = []
+        self.listOfJobsToSave     = []
+        self.listOfJobsToFail     = []
+        self.listOfJobsNeedingASO = []
+        self.filesetAssoc         = []
         gc.collect()
         return
 
@@ -216,10 +219,29 @@ class AccountantWorker(WMConnectionBase):
                                   fwkJobReport = fwkJobReport)
                 jobSuccess = False
             else:
-                self.handleSuccessful(jobID = job["id"],
-                                      fwkJobReport = fwkJobReport,
-                                      fwkJobReportPath = job['fwjr_path'])
-                jobSuccess = True
+                
+                # If the ASOPoller isn't installed, we shouldn't look for ASO
+                #    staged files. This is disabled by default until people
+                #    like it
+                if not hasattr(self.config, "AsyncStageoutTracker"):
+                    asoOutputCount = 0
+                else:
+                    asoOutputCount = self.countASOOutputs(fwkJobReport)
+                    
+                if asoOutputCount == 0:
+                    # all the files are in the right place
+                    self.handleSuccessful(jobID = job["id"],
+                                          fwkJobReport = fwkJobReport,
+                                          fwkJobReportPath = job['fwjr_path'])
+                    jobSuccess = True
+                else:
+                    # some files still need to be moved, wait on processing till then
+                    self.handleNeedsASO(jobID = job["id"],
+                                        fwkJobReport = fwkJobReport,
+                                        fwkJobReportPath = job['fwjr_path'],
+                                        asoOutputCount = asoOutputCount)
+                    jobSuccess = True
+                
 
             if self.returnJobReport:
                 returnList.append({'id': job["id"], 'jobSuccess': jobSuccess,
@@ -262,6 +284,11 @@ class AccountantWorker(WMConnectionBase):
                                         conn = self.getDBConn(),
                                         transaction = self.existingTransaction())
             self.stateChanger.propagate(self.listOfJobsToFail, "jobfailed", "complete")
+            
+        # Finally, if some jobs need to move their files, wait till they're moved before
+        # we report on their status
+        if len(self.listOfJobsNeedingASO) > 0:
+            self.stateChanger.propagate(self.listOfJobsNeedingASO, "asopending", "complete")
 
         # Straighten out DBS Parentage
         if len(self.mergedOutputFiles) > 0:
@@ -396,6 +423,17 @@ class AccountantWorker(WMConnectionBase):
             if file and hasattr(file, 'location'):
                 file.location = self.phedex.getBestNodeName(file.location, self.locLists)
 
+    def countASOOutputs(self, fwkJobReport):
+        count = 0
+        fileList = fwkJobReport.getAllFiles()
+        for fwjrFile in fileList:
+            if getattr(fwjrFile, "async_dest", None) and \
+               fwjrFile['async_dest'] and \
+                string.lower(getattr(fwjrFile, "asyncStatus", "")) != "success":
+                # means we have an async target and it hasn't been moved yet
+                count += 1
+        return count
+
 
     def handleSuccessful(self, jobID, fwkJobReport, fwkJobReportPath = None):
         """
@@ -443,6 +481,18 @@ class AccountantWorker(WMConnectionBase):
 
         return
 
+    def handleNeedsASO(self, jobID, fwkJobReport, fwkJobReportPath = None, asoOutputCount = 0):
+        """
+        _handleNeedsASO_
+
+        If we see the FWJR asks for ASO, move to a set of ASO states before moving to success
+        """
+        wmbsJob = Job(id = jobID)
+        wmbsJob.load()
+        self.listOfJobsNeedingASO.append(wmbsJob)
+
+        return
+    
     def handleFailed(self, jobID, fwkJobReport):
         """
         _handleFailed_

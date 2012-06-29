@@ -88,6 +88,10 @@ class StdBase(object):
         self.dqmUploadUrl = None
         self.dqmSequences = None
         self.procScenario = None
+        self.asyncDest = None
+        self.owner_vogroup = "DEFAULT"
+        self.owner_vorole = "DEFAULT"
+        self.stepType = "CMSSW"
         return
 
     def __call__(self, workloadName, arguments):
@@ -132,6 +136,11 @@ class StdBase(object):
         self.dqmUploadUrl = arguments.get("DQMUploadUrl", "https://cmsweb.cern.ch/dqm/dev")
         self.dqmSequences = arguments.get("DqmSequences", [])
         self.procScenario = arguments.get("ProcScenario", None)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
 
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True

@@ -63,10 +63,13 @@ class JobAccountantPoller(BaseWorkerThread):
         """
         _algorithm_
 
-        Poll WMBS for jobs in the 'Complete' state and then pass them to the
+        Poll WMBS for jobs in the 'Complete' and 'CompleteASO' state and then pass them to the
         accountant worker.
         """
-        completeJobs = self.getJobsAction.execute(state = "complete")
+        completeJobs    = self.getJobsAction.execute(state = "complete")
+        completeASOJobs = self.getJobsAction.execute(state = "completeaso")
+        completeJobs.extend(completeASOJobs)
+        
         logging.info("Jobs: %s" % completeJobs)
 
         if len(completeJobs) == 0:

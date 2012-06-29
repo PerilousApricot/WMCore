@@ -284,6 +284,16 @@ class ErrorHandlerPoller(BaseWorkerThread):
             idList  = idList[self.maxProcessSize:]
             jobList = self.loadJobsFromList(idList = tmpList)
             self.splitJobList(jobList = jobList,    jobType = 'job')
+            
+        # Run over ASO failures
+        idList = self.getJobs.execute(state = 'ASOFailed')
+        logging.info("Found %s failed jobs failed during async-stageout" \
+                     % len(idList))
+        while len(idList) > 0:
+            tmpList = idList[:self.maxProcessSize]
+            idList  = idList[self.maxProcessSize:]
+            jobList = self.loadJobsFromList(idList = tmpList)
+            self.splitJobList(jobList = jobList,    jobType = 'aso')
 
         return
 

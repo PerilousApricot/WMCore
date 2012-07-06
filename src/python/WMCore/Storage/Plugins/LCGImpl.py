@@ -38,7 +38,7 @@ class LCGImpl(StageOutImplV2):
             remoteFileName = toPfn
         else:
             fromPfn2 = fromPfn
-            toPfn2 = self.prependFileProtocol(toPfn)
+            toPfn = self.prependFileProtocol(toPfn)
             localFileName = toPfn
             remoteFileName = fromPfn
             localDir = os.path.dirname( localFileName )
@@ -54,7 +54,7 @@ class LCGImpl(StageOutImplV2):
         
         logging.info("Staging out with lcg-cp")
         logging.info("  commandline: %s" % transferCommand)
-        self.runCommandFailOnNonZero( transferCommand )
+        self.runcommandFailOnNonZero( transferCommand )
 
         logging.info("Verifying file sizes")
         localSize  = os.path.getsize( localFileName )

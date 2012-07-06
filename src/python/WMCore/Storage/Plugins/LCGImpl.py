@@ -23,7 +23,7 @@ class LCGImpl(StageOutImplV2):
     
     """
         
-    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol, checksums, checksum ):
+    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol, checksums ):
         """
             performs a transfer. stageOut tells you which way to go. returns the new pfn or
             raises on failure. StageOutError (and inherited exceptions) are for expected errors
@@ -38,7 +38,7 @@ class LCGImpl(StageOutImplV2):
             remoteFileName = toPfn
         else:
             fromPfn2 = fromPfn
-            toPfn = self.prependFileProtocol(toPfn)
+            toPfn2 = self.prependFileProtocol(toPfn)
             localFileName = toPfn
             remoteFileName = fromPfn
             localDir = os.path.dirname( localFileName )
@@ -54,7 +54,7 @@ class LCGImpl(StageOutImplV2):
         
         logging.info("Staging out with lcg-cp")
         logging.info("  commandline: %s" % transferCommand)
-        self.runcommandFailOnNonZero( transferCommand )
+        self.runCommandFailOnNonZero( transferCommand )
 
         logging.info("Verifying file sizes")
         localSize  = os.path.getsize( localFileName )

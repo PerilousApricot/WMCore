@@ -132,6 +132,8 @@ class StdBase(object):
         self.dqmUploadUrl = arguments.get("DQMUploadUrl", "https://cmsweb.cern.ch/dqm/dev")
         self.dqmSequences = arguments.get("DqmSequences", [])
         self.procScenario = arguments.get("ProcScenario", None)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
 
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True

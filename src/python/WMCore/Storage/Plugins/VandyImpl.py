@@ -18,7 +18,7 @@ class VandyImpl(StageOutImplV2):
     
     
     #BASEDIR='/Users/brumgard/Documents/workspace/VandyStageOut/src/scripts'
-    BASEDIR='/usr/local/cms-stageout'
+    BASEDIR='/home/meloam/susy/lstore-client/cms-stageout/'
     
     def __init__(self, stagein=False):
         
@@ -37,18 +37,18 @@ class VandyImpl(StageOutImplV2):
 
         Creates the directory for vanderbilt
         """
-        
+        logging.info("Calling vandymkdir for %s" % targetPFN)
         command = "%s %s" % (self._mkdirScript, targetPFN)
         
         # Calls the parent execute command to invoke the script which should 
         # throw a stage out error
         exitCode, output = runCommand(command)
+
+        logging.info("Making directory using command %s" % command)
         
         if exitCode != 0:
-            logging.error("Error creating directory in LStore")
-            logging.error("Command: %s" % command)
-            logging.error(output)
-    
+            logging.error("Error creating directory using command: %s" % command)
+            logging.error("Directory creation output: %s" % output)
     
     def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, 
                    protocol, checksum):

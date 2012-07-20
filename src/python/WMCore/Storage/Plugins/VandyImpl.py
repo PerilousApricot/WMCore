@@ -16,7 +16,9 @@ import logging
 
 class VandyImpl(StageOutImplV2):
     
-    BASEDIR='/usr/local/ms-stageout/'
+    
+    #BASEDIR='/Users/brumgard/Documents/workspace/VandyStageOut/src/scripts'
+    BASEDIR='/usr/local/cms-stageout'
     
     def __init__(self, stagein=False):
         
@@ -35,18 +37,16 @@ class VandyImpl(StageOutImplV2):
 
         Creates the directory for vanderbilt
         """
-        logging.info("Calling vandymkdir for %s" % targetPFN)
-        command = "%s %s" % (self._mkdirScript, targetPFN)
+        
+        command = "%s %s" % (self._mkdirScript, os.path.dirname(targetPFN))
         
         # Calls the parent execute command to invoke the script which should 
         # throw a stage out error
         exitCode, output = runCommand(command)
-
-        logging.info("Making directory using command %s" % command)
         
         if exitCode != 0:
-            logging.error("Error creating directory using command: %s" % command)
-            logging.error("Directory creation output: %s" % output)
+            logging.error("Error creating directory")
+            logging.error(output)
     
     def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, 
                    protocol, checksum):

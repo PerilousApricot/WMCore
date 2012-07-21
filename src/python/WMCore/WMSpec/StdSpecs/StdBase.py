@@ -477,9 +477,9 @@ class StdBase(object):
             lfnBase(unmergedLFN)
             lfnBase(mergedLFN)
 
-        if forceMerged:
+        if forceMerged and not self.forceUserStorage:
             unmergedLFN = mergedLFN
-        elif forceUnmerged:
+        elif forceUnmerged or self.forceUserStorage:
             mergedLFN = unmergedLFN
 
         cmsswStep = parentTask.getStep(stepName)

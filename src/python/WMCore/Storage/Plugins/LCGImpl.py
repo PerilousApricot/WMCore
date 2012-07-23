@@ -38,34 +38,23 @@ class LCGImpl(StageOutImplV2):
             remoteFileName = toPfn
         else:
             fromPfn2 = fromPfn
-<<<<<<< HEAD
             toPfn2 = self.prependFileProtocol(toPfn)
-=======
-            toPfn = self.prependFileProtocol(toPfn)
->>>>>>> 2cc31d1... Commit from cmssrv94
             localFileName = toPfn
             remoteFileName = fromPfn
             localDir = os.path.dirname( localFileName )
             if not os.path.exists( localDir ):
                 logging.info("Making local directory %s" % localDir)
                 os.makedirs( localDir )
-<<<<<<< HEAD
         
         if not options:
             options = ""
-=======
->>>>>>> 2cc31d1... Commit from cmssrv94
 
         transferCommand = "lcg-cp -b -D srmv2 --vo cms --srm-timeout 2400 --sendreceive-timeout 2400 --connect-timeout 300 --verbose %s %s %s " %\
                             ( options, fromPfn2, toPfn2 )
         
         logging.info("Staging out with lcg-cp")
         logging.info("  commandline: %s" % transferCommand)
-<<<<<<< HEAD
         self.runCommandFailOnNonZero( transferCommand )
-=======
-        self.runcommandFailOnNonZero( transferCommand )
->>>>>>> 2cc31d1... Commit from cmssrv94
 
         logging.info("Verifying file sizes")
         localSize  = os.path.getsize( localFileName )

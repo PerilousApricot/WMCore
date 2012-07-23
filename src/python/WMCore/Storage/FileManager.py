@@ -316,12 +316,14 @@ class FileManager:
                 logging.error("Tried to load stageout backend %s, a new version isn't there yet" % command)
                 logging.error("Will try to fall back to the oldone, but it's really best to redo it")
                 logging.error("Here goes...")
-                return stageOutSlave( protocol, localFileName, pfn, options )
+                stageOutSlave( protocol, localFileName, pfn, options )
+                return pfn
             
             # do the copy. The implementation is responsible for its own verification
             newPfn = None
             try:
-                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol  )
+                # FIXME add checksum stuff
+                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol, None  )
             except StageOutError, ex:
                 log.info("Transfer failed in an expected manner. Exception is:")
                 log.info("%s" % str(ex))

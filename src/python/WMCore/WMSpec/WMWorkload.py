@@ -646,10 +646,10 @@ class WMWorkloadHelper(PersistencyHelper):
                             processingString = task.getProcessingVersion()
 
                         if getattr(self.data.properties,"forceUserStorage",0) or taskType in analysisTaskTypes:
-                            unmergedLFN = "%s/%s" % (self.unmergedLFNBase, getattr(outputModule, "primaryDataset"))
+                            unmergedLFN = "%s/%s" % (self.data.properties.unmergedLFNBase, getattr(outputModule, "primaryDataset"))
                 
                             if haveFilterName:
-                                unmergedLFN += "/%s-%s" % (self.acquisitionEra, filterName)
+                                unmergedLFN += "/%s-%s" % (task.getAcquisitionEra(), filterName)
                             else:
                                 unmergedLFN += "/%s" % self.acquisitionEra
                 
@@ -824,7 +824,7 @@ class WMWorkloadHelper(PersistencyHelper):
         """
         return getattr(self.data.properties, 'custodialSite', None)
 
-    def setLFNBase(self, mergedLFNBase, unmergedLFNBase, forceUserOutput = 0):
+    def setLFNBase(self, mergedLFNBase, unmergedLFNBase, forceUserStorage = 0):
         """
         _setLFNBase_
 
@@ -833,7 +833,7 @@ class WMWorkloadHelper(PersistencyHelper):
         """
         self.data.properties.mergedLFNBase = mergedLFNBase
         self.data.properties.unmergedLFNBase = unmergedLFNBase
-        self.data.properties.forceUserOutput = forceUserOutput
+        self.data.properties.forceUserStorage = forceUserStorage
         self.updateLFNsAndDatasets()
         return
 

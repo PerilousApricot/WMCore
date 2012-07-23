@@ -248,7 +248,7 @@ class Assign(WebAPI):
         helper.setProcessingVersion(kwargs["ProcessingVersion"])
         helper.setAcquisitionEra(kwargs["AcquisitionEra"])
         #FIXME not validated
-        helper.setLFNBase(kwargs["MergedLFNBase"], kwargs["UnmergedLFNBase"], kwargs.get("ForceUserOutput", 0))
+        helper.setLFNBase(kwargs["MergedLFNBase"], kwargs["UnmergedLFNBase"], kwargs.get("ForceUserStorage", 0))
 
         helper.setMergeParameters(int(kwargs["MinMergeSize"]),
                                   int(kwargs["MaxMergeSize"]), 

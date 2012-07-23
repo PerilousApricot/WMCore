@@ -160,13 +160,17 @@ class FileManagerTest(unittest.TestCase):
         
     def testStageInMgrWrapperRealCopyFallback(self):
         self.testDir = tempfile.mkdtemp()
-        shutil.copy('/etc/hosts', self.testDir + '/INPUT')
-        fileForTransfer = {'LFN': '/INPUT', \
-                           'PFN': '%s/etc/hosts' % self.testDir, \
+        #shutil.copy('/etc/hosts', self.testDir + '/INPUT')
+        #fileForTransfer = {'LFN': '/INPUT', \
+        #                   'PFN': '%s/etc/hosts' % self.testDir, \
+        #                   'SEName' : None, \
+        #                   'StageOutCommand': None}
+
+        fileForTransfer = {'LFN': '/etc/hosts', \
+                           'PFN': '/etc/hosts', \
                            'SEName' : None, \
                            'StageOutCommand': None}
-
-        wrapper = StageInMgr(  **{
+        wrapper = StageOutMgr(  **{
                                 'command'    : 'testFallbackToOldBackend',
                                 'option'    : '', 
                                 'se-name'  : 'test-win', 

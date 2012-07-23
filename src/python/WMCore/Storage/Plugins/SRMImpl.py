@@ -40,7 +40,7 @@ class SRMImpl(StageOutImplV2):
 
 
 
-    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol  ):
+    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol, checksum  ):
         toPfn   = self.createSourceName(protocol, toPfn)
         fromPfn = self.createSourceName(protocol, fromPfn)       
         (_,reportFile) = tempfile.mkstemp()

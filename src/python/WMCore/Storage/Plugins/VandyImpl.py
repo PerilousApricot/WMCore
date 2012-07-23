@@ -50,7 +50,7 @@ class VandyImpl(StageOutImplV2):
     
     
     def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, 
-                   protocol):
+                   protocol, checksum):
         """            
             if stageOut is true:
                 The fromPfn is the LOCAL FILE NAME on the node, without file://

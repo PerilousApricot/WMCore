@@ -48,7 +48,7 @@ class SRMImpl(StageOutImplV2):
         """
         return '/pnfs/cms/WAX' + pfn.split('=')[1]
 
-    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol  ):
+    def doTransfer(self, fromPfn, toPfn, stageOut, seName, command, options, protocol, checksum  ):
         toPfn   = self.createSourceName(protocol, toPfn)
         fromPfn = self.createSourceName(protocol, fromPfn)
         (_,reportFile) = tempfile.mkstemp()

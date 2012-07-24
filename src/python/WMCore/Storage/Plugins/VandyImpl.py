@@ -82,9 +82,10 @@ class VandyImpl(StageOutImplV2):
         print(output)
     
         if exitCode != 0:
-            logging.error("Error in file transfer:")
-            logging.error(output)
-            raise StageOutError, "Transfer failure, command %s, error %s" % (command, output)
+            logging.error("Error in file transfer.")
+            logging.error("Command: %s" % command)
+            logging.error("Output:\n %s" % output)
+            raise StageOutError, "Transfer failure"
     
         # Returns the path
         return dstPath

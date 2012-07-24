@@ -38,7 +38,7 @@ class VandyImpl(StageOutImplV2):
         Creates the directory for vanderbilt
         """
         
-        command = "%s %s" % (self._mkdirScript, os.path.dirname(targetPFN))
+        command = "%s %s" % (self._mkdirScript, targetPFN)
         
         # Calls the parent execute command to invoke the script which should 
         # throw a stage out error
@@ -67,8 +67,11 @@ class VandyImpl(StageOutImplV2):
             dstPath = fromPfn
         
         # Creates the directory
-        self.createOutputDirectory(os.path.dirname(dstPath))
-        
+        if stageOut:
+            self.createOutputDirectory(os.path.dirname(dstPath))
+        else:
+            os.makedirs(os.path.dirname(dstPath))
+            
         # Does the copy
         if stageOut:
             command = "%s %s %s" % (self._cpScript, fromPfn, toPfn)

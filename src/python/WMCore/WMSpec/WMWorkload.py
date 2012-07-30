@@ -651,7 +651,7 @@ class WMWorkloadHelper(PersistencyHelper):
                             if haveFilterName:
                                 unmergedLFN += "/%s-%s" % (task.getAcquisitionEra(), filterName)
                             else:
-                                unmergedLFN += "/%s" % self.acquisitionEra
+                                unmergedLFN += "/%s" % task.getAcquisitionEra()
                 
                             unmergedLFN += "/%s" % processingString
                             mergedLFN    = unmergedLFN

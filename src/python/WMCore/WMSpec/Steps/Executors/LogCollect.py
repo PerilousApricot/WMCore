@@ -59,10 +59,10 @@ class LogCollect(Executor):
             overrides = self.step.override.dictionary_()
 
         # Set wait to over an hour
-        waitTime  = overrides.get('waitTime', 3600 + (self.step.retryDelay * self.step.retryCount))
-        seName    = overrides.get('seName',    "srm-cms.cern.ch")
-        lfnPrefix = overrides.get('lfnPrefix', "srm://srm-cms.cern.ch:8443/srm/managerv2?SFN=/castor/cern.ch/cms")
-        lfnBase   = overrides.get('lfnBase',   "/store/user/jsmith")
+        waitTime  = overrides.get('waitTime', 600 + (self.step.retryDelay * self.step.retryCount))
+        seName    = overrides.get('seName',    "se1.accre.vanderbilt.edu")
+        lfnPrefix = overrides.get('lfnPrefix', "srm://se1.accre.vanderbilt.edu:6288/srm/v2/server?SFN=/store/unmerged")
+        lfnBase   = overrides.get('lfnBase',   "/store/user/meloam")
         userLogs  = overrides.get('userLogs',  False)
         dontStage = overrides.get('dontStage', False)
 

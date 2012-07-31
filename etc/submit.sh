@@ -7,6 +7,12 @@ echo "WMAgent bootstrap : `date -u` : starting..."
 
 
 # validate arguments
+echo "Hostname: `hostname`"
+echo "  UserID: `id`"
+echo "HostInfo: `uname -a`"
+echo "    Time: `date -u`"
+echo "Environment is:"
+env
 
 if [ "x" = "x$1" ]
 then

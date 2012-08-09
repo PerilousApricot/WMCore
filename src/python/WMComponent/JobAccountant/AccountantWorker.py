@@ -17,6 +17,7 @@ import threading
 import logging
 import gc
 import collections
+import string
 
 from WMCore.Agent.Configuration  import Configuration
 from WMCore.FwkJobReport.Report  import Report
@@ -485,6 +486,8 @@ class AccountantWorker(WMConnectionBase):
 
         If we see the FWJR asks for ASO, move to a set of ASO states before moving to success
         """
+        wmbsJob = Job(id = jobID)
+        wmbsJob.load()
         self.listOfJobsNeedingASO.append(wmbsJob)
 
         return

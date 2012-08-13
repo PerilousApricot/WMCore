@@ -67,8 +67,6 @@ class JobAccountantPoller(BaseWorkerThread):
         accountant worker.
         """
         completeJobs    = self.getJobsAction.execute(state = "complete")
-        completeASOJobs = self.getJobsAction.execute(state = "completeaso")
-        completeJobs.extend(completeASOJobs)
         
         logging.info("Jobs: %s" % completeJobs)
 

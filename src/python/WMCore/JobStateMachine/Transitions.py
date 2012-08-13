@@ -22,7 +22,7 @@ class Transitions(dict):
         self.setdefault('createcooloff', ['new', 'killed', 'createpaused'])
         self.setdefault('submitcooloff', ['created', 'killed', 'submitpaused'])
         self.setdefault('jobcooloff', ['created', 'jobpaused', 'killed'])
-        self.setdefault('asocooloff', ['created', 'asopaused', 'killed'])
+        self.setdefault('asocooloff', ['asopending', 'asopaused', 'killed'])
         self.setdefault('success', ['cleanout'])
         self.setdefault('exhausted', ['cleanout'])
         self.setdefault('killed', ['cleanout', 'killed'])

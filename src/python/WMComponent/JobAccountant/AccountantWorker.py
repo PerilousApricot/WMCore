@@ -113,7 +113,7 @@ class AccountantWorker(WMConnectionBase):
 
         self.phedex = PhEDEx()
         self.locLists = self.phedex.getNodeMap()
-
+        self.config = config
 
         return
 
@@ -226,7 +226,7 @@ class AccountantWorker(WMConnectionBase):
                 if not hasattr(self.config, "AsyncStageoutTracker"):
                     asoOutputCount = 0
                 else:
-                    asoOutputCount = self.countJobASOOutputs(fwkJobReport)
+                    asoOutputCount = self.countASOOutputs(fwkJobReport)
                     
                 if asoOutputCount == 0:
                     # all the files are in the right place
@@ -427,7 +427,7 @@ class AccountantWorker(WMConnectionBase):
         count = 0
         fileList = fwkJobReport.getAllFiles()
         for fwjrFile in fileList:
-            if getattr(fwjrFile, "asyncDest", None) and \
+            if getattr(fwjrFile, "async_dest", None) and \
                 string.lower(getattr(fwjrFile, "asyncStatus", "")) != "success":
                 # means we have an async target and it hasn't been moved yet
                 count += 1

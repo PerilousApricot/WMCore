@@ -145,13 +145,13 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
             
             # retrieve all the files for this workflow, if it exists
             if not workflow in filesCache:
-                query = { 'startkey' : [workflow, self.lastMonitoringTimestamp - 120],
-                          'endkey' : [workflow, currentTime],
+                query = { 'startkey' : [workflow, int(self.lastMonitoringTimestamp - 120)],
+                          'endkey' : [workflow, int(currentTime) + 1],
                           'reduce' : False }
                 monFiles = self.asoMonDB.loadView('UserMonitoring',\
                                                   'FilesByWorkflow',\
                                                   query)
-                self.logger.info("Got this for files %s" % monFiles)
+                self.logger.info("Got this for files %s using %s" % (monFiles, query))
                 oneCache = {}
                 for oneFile in monFiles['rows']:
                     # Store the timestamp for the transferred file
@@ -178,7 +178,7 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                 lfn = fwjrFile.lfn
                 
                 # if we wanted ASO, ASO is complete and the LFN is there
-                if getattr(fwjrFile, "asyncDest", None) and \
+                if getattr(fwjrFile, "async_dest", None) and \
                     not getattr(fwjrFile, "asyncStatus", None):
                     
                     if not lfn in asoFiles:

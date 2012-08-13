@@ -84,6 +84,10 @@ class StdBase(object):
         self.timePerEvent = 60
         self.memory = 2000
         self.sizePerEvent = 512
+        self.asyncDest = None
+        self.owner_vogroup = "DEFAULT"
+        self.owner_vorole = "DEFAULT"
+        self.stepType = "CMSSW"
         return
 
     def __call__(self, workloadName, arguments):
@@ -126,7 +130,9 @@ class StdBase(object):
         self.sizePerEvent = int(arguments.get("SizePerEvent", 512))
         self.userSandbox = arguments.get("userSandbox", None)
         self.userFiles = arguments.get("userFiles", [])
-
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True
         else:

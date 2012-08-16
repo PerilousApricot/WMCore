@@ -84,7 +84,7 @@ class LogArchive(Executor):
             ]
 
         #Okay, we need a stageOut Manager
-        useNewStageOutCode = True
+        useNewStageOutCode = False
         if overrides.has_key('newStageOut') and overrides.get('newStageOut'):
             useNewStageOutCode = True
         if not useNewStageOutCode:

@@ -77,7 +77,7 @@ class StageOut(Executor):
         # Pull out StageOutMgr Overrides
 
         # switch between old stageOut behavior and new, fancy stage out behavior
-        useNewStageOutCode = True
+        useNewStageOutCode = False
         if overrides.has_key('newStageOut') and overrides.get('newStageOut'):
             useNewStageOutCode = True
 

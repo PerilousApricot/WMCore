@@ -31,7 +31,7 @@ class Destroy(DBFormatter):
             self.dbi.processData(sql, {}, conn = conn,
                                  transaction = transaction)
 
-        sql = """CREATE DATABASE %s""" % dbName
+        sql = """CREATE DATABASE IF NOT EXISTS %s""" % dbName
         self.dbi.processData(sql, {}, conn = conn,
                              transaction = transaction)
 

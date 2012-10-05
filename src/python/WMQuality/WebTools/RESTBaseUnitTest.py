@@ -13,7 +13,7 @@ from WMCore.WebTools.Root import Root
 
 class RESTBaseUnitTest(unittest.TestCase):
     
-    def setUp(self, initRoot = True):
+    def setUp(self, initRoot = True, testingClass = None):
         # default set
         self.schemaModules = []
             
@@ -22,7 +22,7 @@ class RESTBaseUnitTest(unittest.TestCase):
             import warnings
             warnings.warn("use RESTAndCouchUnitTest instead", DeprecationWarning)
             from WMQuality.TestInitCouchApp import TestInitCouchApp
-            self.testInit = TestInitCouchApp(__file__)
+            self.testInit = TestInitCouchApp(__file__, testingClass)
             self.testInit.setLogging() # logLevel = logging.SQLDEBUG
             self.testInit.setDatabaseConnection()
             self.testInit.setSchema(customModules = self.schemaModules,

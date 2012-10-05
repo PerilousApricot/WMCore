@@ -21,14 +21,17 @@ import shutil
 import time
 import nose
 import traceback
+import WMQuality.DatabaseCache
 
 from WMCore.Agent.Configuration import Configuration
 from WMCore.Agent.Configuration import loadConfigurationFile
 from WMCore.WMException         import WMException
+
 hasDatabase = True
 try:
     from WMCore.Database.DBFormatter import DBFormatter
     from WMCore.WMInit import WMInit
+    import WMQuality.DatabaseCache
 except ImportError:
     print "NOTE: TestInit is being loaded without database support"
     hasDatabase = False
@@ -87,7 +90,8 @@ class TestInit:
     minimize code duplication.
     """ 
 
-    def __init__(self, testClassName = "Unknown Class"):
+    def __init__(self, testClassName = "Unknown Class",
+                        preserveDBOnTearDown = False):
         self.testClassName = testClassName
         self.testDir = None
         self.currModules = []
@@ -96,6 +100,9 @@ class TestInit:
         if self.hasDatabase:
             self.init = WMInit()
         self.deleteTmp = True
+        self.cachingSet = False
+        
+        # enable class-level tests meaning the database is only wiped if
     
     def __del__(self):
         if self.deleteTmp:
@@ -164,28 +171,20 @@ class TestInit:
         on in any other instance where you don't know what you're doing.
         """
         if not self.hasDatabase:
-            return        
+            return
+        
         config = self.getConfiguration(connectUrl=connectUrl, socket=socket)
         self.coreConfig = config
         self.init.setDatabaseConnection(config.CoreDatabase.connectUrl,
                                         config.CoreDatabase.dialect,
                                         config.CoreDatabase.socket)
-
-        if trashDatabases or destroyAllDatabase:
-            self.clearDatabase()
-
-        # Have to check whether or not database is empty 
-        # If the database is not empty when we go to set the schema, abort! 
-        result = self.init.checkDatabaseContents() 
-        if len(result) > 0: 
-            msg =  "Database not empty, cannot set schema !\n" 
-            msg += str(result) 
-            logging.error(msg) 
-            raise TestInitException(msg) 
+        
+        self.destroyAllDatabase = destroyAllDatabase
 
         return
 
-    def setSchema(self, customModules = [], useDefault = True, params = None):
+    def setSchema(self, customModules = [], useDefault = True, params = None,
+                        disableCaching = False):
         """
         Creates the schema in the database for the default 
         tables/services: trigger, message service, threadpool.
@@ -198,20 +197,19 @@ class TestInit:
         """
         if not self.hasDatabase:
             return 
+        
+        global trashDatabases
+        if disableCaching and \
+            trashDatabases or self.destroyAllDatabase:
+            self.clearDatabase()
+
         defaultModules = ["WMCore.WMBS"]
         if not useDefault:
             defaultModules = []
-
         # filter out unique modules
         modules = {}
         for module in (defaultModules + customModules):
             modules[module] = 'done'
-
-        try:
-            self.init.setSchema(modules.keys(), params = params)
-        except Exception, ex:
-            print traceback.format_exc()
-            raise ex
             
         # store the list of modules we've added to the DB
         modules = {}
@@ -219,7 +217,39 @@ class TestInit:
             modules[module] = 'done'
 
         self.currModules = modules.keys()
+        
+        if disableCaching:
+            # Have to check whether or not database is empty 
+            # If the database is not empty when we go to set the schema, abort! 
+            result = self.init.checkDatabaseContents() 
+            if len(result) > 0: 
+                msg =  "Database not empty, cannot set schema !\n" 
+                msg += str(result) 
+                logging.error(msg) 
+                raise TestInitException(msg) 
+        else:
+            cacheSuccess = WMQuality.DatabaseCache.loadCachedSQL( modules.keys() )
+            if cacheSuccess:
+                self.cachingSet = True
+                return True
+            else:
+                self.cachingSet = False
+                self.clearDatabase()
 
+        
+        # If we made it here, we need to actually load the schema
+        try:
+            self.init.setSchema(modules.keys(), params = params)
+        except Exception, ex:
+            print traceback.format_exc()
+            raise ex
+ 
+        self.cachingSet = WMQuality.DatabaseCache.cacheSQL( modules.keys() )
+        
+        
+        # track what the schema is so we can see if it was modified previously
+        if disableCaching:
+            self.cachingSet = False
         return
 
     def getDBInterface(self):
@@ -268,14 +298,21 @@ class TestInit:
             # after this you can augment it with whatever you need.
         return config
 
-    def clearDatabase(self, modules = []):
+    def clearDatabase(self, modules = [], ignoreCaching = False):
         """
         Database deletion. Global, ignore modules.
         """
         if not self.hasDatabase:
             return 
-
-        self.init.clearDatabase()
+        
+        # Tell the DB cache that tearing down the database is enabled
+        # and has been deferred
+        
+        if ignoreCaching or not self.cachingSet:
+            self.init.clearDatabase()
+            WMQuality.DatabaseCache.disableDatabaseTeardown()
+        else:
+            WMQuality.DatabaseCache.enableDatabaseTeardown()
 
         return
 

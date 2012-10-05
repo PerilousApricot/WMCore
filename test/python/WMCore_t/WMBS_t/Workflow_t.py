@@ -15,6 +15,8 @@ from WMCore.WMBS.Workflow import Workflow
 
 from WMQuality.TestInit import TestInit
 
+import WMQuality.TestHarness
+
 class WorkflowTest(unittest.TestCase):
 
     def setUp(self):
@@ -530,4 +532,4 @@ class WorkflowTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    WMQuality.TestHarness.main( )

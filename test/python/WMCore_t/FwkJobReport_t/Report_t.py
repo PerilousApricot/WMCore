@@ -32,7 +32,6 @@ class ReportTest(unittest.TestCase):
         """
         self.testInit = TestInitCouchApp(__file__)
         self.testInit.setLogging()
-        self.testInit.setDatabaseConnection(destroyAllDatabase = True)
         self.testInit.setupCouch("report_t/fwjrs", "FWJRDump")
 
         self.xmlPath = os.path.join(WMCore.WMBase.getTestBase(),
@@ -49,7 +48,6 @@ class ReportTest(unittest.TestCase):
         Cleanup the databases.
         """
         self.testInit.tearDownCouch()
-        self.testInit.clearDatabase()
         self.testInit.delWorkDir()
         return
 

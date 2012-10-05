@@ -27,6 +27,9 @@ class ResultSet:
 
     def fetchall(self):
         return self.data
+    
+    def fetchkeys(self):
+        return self.keys
 
     def add(self, resultproxy):
         myThread = threading.currentThread()

@@ -10,7 +10,8 @@ from WMCore.Database.DBFormatter import DBFormatter
 class Destroy(DBFormatter):    
 
     def execute(self, subscription = None, conn = None, transaction = False):
-
+        
+        print "*** exeuting SQL destroy"
         sql = """SELECT DATABASE() AS dbname"""
 
         results = self.dbi.processData(sql, {}, conn = conn,

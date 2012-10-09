@@ -36,6 +36,11 @@ def loadPickledState():
         cachedDump    = state['dump']
 
 def savePickledState():
+    """
+    returns True if the pickle was loaded
+    returns if the pickle couldn't be loaded
+    """ 
+    
     global cachedModules, cachedDump
     if getStatePath():
         try:
@@ -99,6 +104,7 @@ def loadCachedSQL( modulesRequested ):
             try:
                 return cacheAction.execute( cachedDump )
             except:
+                print "Unable to load cached SQL"
                 return False
                 
         else:

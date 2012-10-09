@@ -102,7 +102,7 @@ class AnalyticsDataCollector_t(unittest.TestCase):
 
     def testAnalyticsPoller(self):
         """
-        Tests the components, as in sees if they load.
+        Tests the components, as in sees if they load. Analytics
         Otherwise does nothing.
         """
         myThread = threading.currentThread()

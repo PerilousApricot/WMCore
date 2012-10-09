@@ -10,7 +10,7 @@ from WMCore.Database.DBFormatter import DBFormatter
 class DumpAll(DBFormatter):    
 
     def execute(self, subscription = None, conn = None, transaction = False):
-        
+        assert conn, "need a connection"
         # get tables
         sql = """SELECT table_name FROM information_schema.tables 
                  WHERE table_schema = (SELECT DATABASE())"""

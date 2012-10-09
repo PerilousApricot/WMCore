@@ -22,6 +22,7 @@ import time
 import nose
 import traceback
 import WMQuality.DatabaseCache
+from WMCore.DAOFactory  import DAOFactory
 
 from WMCore.Agent.Configuration import Configuration
 from WMCore.Agent.Configuration import loadConfigurationFile
@@ -178,6 +179,15 @@ class TestInit:
         self.init.setDatabaseConnection(config.CoreDatabase.connectUrl,
                                         config.CoreDatabase.dialect,
                                         config.CoreDatabase.socket)
+
+        myThread = threading.currentThread()
+        daofactory = DAOFactory(package = "WMCore.Database",
+                                         logger = myThread.logger,
+                                         dbinterface = myThread.dbi)
+    
+        cacheAction = daofactory(classname = "DumpAll")
+        print "setting database connection"
+        print cacheAction.execute()
         
         self.destroyAllDatabase = destroyAllDatabase
 
@@ -198,10 +208,27 @@ class TestInit:
         if not self.hasDatabase:
             return 
         
+        myThread = threading.currentThread()
+        daofactory = DAOFactory(package = "WMCore.Database",
+                                         logger = myThread.logger,
+                                         dbinterface = myThread.dbi)
+    
+        cacheAction = daofactory(classname = "GetCurrentDatabase")
+        print "setting schema 1"
+        print cacheAction.execute()
+        
         global trashDatabases
         if disableCaching and \
             trashDatabases or self.destroyAllDatabase:
             self.clearDatabase()
+            
+        myThread = threading.currentThread()
+        daofactory = DAOFactory(package = "WMCore.Database",
+                                         logger = myThread.logger,
+                                         dbinterface = myThread.dbi)
+    
+        cacheAction = daofactory(classname = "GetCurrentDatabase")
+        cacheAction.execute()
 
         defaultModules = ["WMCore.WMBS"]
         if not useDefault:
@@ -210,13 +237,20 @@ class TestInit:
         modules = {}
         for module in (defaultModules + customModules):
             modules[module] = 'done'
-            
-        # store the list of modules we've added to the DB
-        modules = {}
-        for module in (defaultModules + customModules + self.currModules):
-            modules[module] = 'done'
-
-        self.currModules = modules.keys()
+        
+        if not modules:
+            # nothing to load
+            self.cachingSet = False
+            self.clearDatabase( ignoreCaching = True )
+            return
+        
+        dbAction = daofactory(classname = "GetCurrentDatabase")
+        print "clearing the database1"
+        currentDB = dbAction.execute()
+        print currentDB
+        if not currentDB:
+            raise RuntimeError, "currentdb is blank"
+        
         
         if disableCaching:
             # Have to check whether or not database is empty 
@@ -231,11 +265,22 @@ class TestInit:
             cacheSuccess = WMQuality.DatabaseCache.loadCachedSQL( modules.keys() )
             if cacheSuccess:
                 self.cachingSet = True
-                return True
+                print "setting schema 2"
+                currentDump = cacheAction.execute()
+                if not currentDump:
+                    raise RuntimeError, "Tried to load the dump, is empty"
+                print currentDump
+                return
             else:
                 self.cachingSet = False
                 self.clearDatabase()
-
+        
+        dbAction = daofactory(classname = "GetCurrentDatabase")
+        print "clearing the database2"
+        currentDB = dbAction.execute()
+        print currentDB
+        if not currentDB:
+            raise RuntimeError, "currentdb is blank"
         
         # If we made it here, we need to actually load the schema
         try:
@@ -250,6 +295,11 @@ class TestInit:
         # track what the schema is so we can see if it was modified previously
         if disableCaching:
             self.cachingSet = False
+            
+        print "setting schema 3"
+        currentDump = cacheAction.execute()
+        if not currentDump:
+            raise RuntimeError, "Tried to load the dump, is empty"
         return
 
     def getDBInterface(self):
@@ -305,16 +355,41 @@ class TestInit:
         if not self.hasDatabase:
             return 
         
+        myThread = threading.currentThread()
+        daofactory = DAOFactory(package = "WMCore.Database",
+                                         logger = myThread.logger,
+                                         dbinterface = myThread.dbi)
+    
+        cacheAction = daofactory(classname = "DumpAll")
+        print "-in clea dump"
+        currentDump = cacheAction.execute()
+        if not currentDump:
+            print "Empty database before clearDatabase"
+            
+        dbAction = daofactory(classname = "GetCurrentDatabase")
+        print "-in currdb"
+        currentDB = dbAction.execute()
+        print currentDB
+        if not currentDB:
+            raise RuntimeError, "currentdb is blank"
+        
         # Tell the DB cache that tearing down the database is enabled
         # and has been deferred
         
         if ignoreCaching or not self.cachingSet:
+            raise
             self.init.clearDatabase()
             WMQuality.DatabaseCache.disableDatabaseTeardown()
         else:
             WMQuality.DatabaseCache.enableDatabaseTeardown()
+        
+        dbAction = daofactory(classname = "GetCurrentDatabase")
+        print "-in currdb2"
+        currentDB = dbAction.execute()
+        print currentDB
+        if not currentDB:
+            raise RuntimeError, "currentdb is blank"           
 
-        return
 
     def attemptToCloseDBConnections(self):
         return

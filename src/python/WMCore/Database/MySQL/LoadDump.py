@@ -22,6 +22,8 @@ class LoadDump(DBFormatter):
 
     def execute(self, dump, conn = None, transaction = False):
         success = True
+        transaction = False
+        assert conn, "need a con"
         try:
             # get tables
             sql = """SELECT table_name FROM information_schema.tables 

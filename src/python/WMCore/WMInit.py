@@ -157,8 +157,10 @@ class WMInit:
         if params != None:
             parameters = [None, None, params]
             flag = True
-
-        myThread.transaction.begin()
+        
+        # this used to be wrapped in a transaction, but CREATE TABLE statements
+        # implicitly commit any transaction, so that's kinda pointless
+        #   -AMM 10/2012
         for factoryName in modules:
             # need to create these tables for testing.
             # notice the default structure: <dialect>/Create
@@ -171,7 +173,6 @@ class WMInit:
                 logging.debug("Tables for "+ factoryName + " created")
             else:
                 logging.debug("Tables " + factoryName + " could not be created.")
-        myThread.transaction.commit()
 
     def clearDatabase(self, modules = []):
         """

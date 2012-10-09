@@ -279,7 +279,7 @@ class JobArchiverTest(unittest.TestCase):
         """
         _SpeedTest_
         
-        Tests the components, as in sees if they load.
+        Tests the components, as in sees if they load. JobArchiver
         Otherwise does nothing.
         """
         return

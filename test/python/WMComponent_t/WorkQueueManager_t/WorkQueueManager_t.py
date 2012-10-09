@@ -91,7 +91,7 @@ class WorkQueueManagerTest(WorkQueueTestCase):
 
     def testComponentBasic(self):
         """
-        Tests the components, as in sees if they load.
+        Tests the components, as in sees if they load. WQM
         Otherwise does nothing.
         """
         return

@@ -270,6 +270,9 @@ if can_nose:
                 retval = self.callNose(args, paths = testPath)
             else:
                 print "### We are in buildbot mode ###"
+                import logging
+                #logging.basicConfig()
+                #logging.getLogger('sqlalchemy.engine').setLevel(logging.DEBUG)
                 srcRoot = os.path.join(os.path.normpath(os.path.dirname(__file__)), 'src', 'python')
                 modulesToCover = []
                 modulesToCover.extend(get_subpackages(os.path.join(srcRoot,'WMCore'), 'WMCore'))

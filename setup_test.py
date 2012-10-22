@@ -172,7 +172,7 @@ if can_nose:
             self.workerNodeTestsOnly = False
             self.testCertainPath = False
             self.quickTestMode = False
-            self.testingRoot = "test/python"
+#            self.testingRoot = "test/python"
             self.testTotalSlices = 1
             self.testCurrentSlice = 0
             self.testMinimumIndex = 0

@@ -421,7 +421,7 @@ class CondorPlugin(BasePlugin):
 
         # Now we should have sent all jobs to be submitted
         # Going to do the rest of it now
-        for n in range(nSubmits):
+        for _ in range(nSubmits):
             try:
                 res = self.result.get(block = True, timeout = timeout)
             except Queue.Empty:

@@ -161,10 +161,6 @@ class AnalysisWorkloadFactory(StdBase):
         StdBase.__call__(self, workloadName, arguments)
 
         # Parameters for users
-        self.owner_vogroup = arguments.get("VoGroup", '')
-        self.owner_vorole = arguments.get("VoRole", '')
-        self.userSandbox = arguments.get("userSandbox", None)
-        self.userFiles = arguments.get("userFiles", [])
         self.outputFiles = arguments.get("OutputFiles", [])
         self.userName = arguments.get("Username",'jblow')
         self.saveLogs = arguments.get("SaveLogs", True)
@@ -189,7 +185,6 @@ class AnalysisWorkloadFactory(StdBase):
         self.blockWhitelist = arguments.get("BlockWhitelist", [])
         self.runWhitelist = arguments.get("RunWhitelist", [])
         self.runBlacklist = arguments.get("RunBlacklist", [])
-        self.asyncDest = arguments.get("asyncDest", "T1_US_FNAL_Buffer")
 
         # ACDC and job splitting
         self.ACDCURL = arguments.get("ACDCUrl", "")

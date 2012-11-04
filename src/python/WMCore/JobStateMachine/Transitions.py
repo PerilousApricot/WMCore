@@ -14,19 +14,24 @@ class Transitions(dict):
         self.setdefault('new', ['created', 'createfailed', 'killed'])
         self.setdefault('created', ['executing', 'submitfailed', 'createfailed', 'killed'])
         self.setdefault('executing', ['complete', 'jobfailed', 'killed'])
-        self.setdefault('complete', ['jobfailed', 'success'])
+        self.setdefault('complete', ['asopending','jobfailed', 'success'])
         self.setdefault('createfailed', ['createcooloff', 'exhausted', 'killed'])
         self.setdefault('submitfailed', ['submitcooloff', 'exhausted', 'killed'])
         self.setdefault('jobfailed', ['jobcooloff', 'exhausted', 'killed'])
+        self.setdefault('asofailed', ['asocooloff', 'exhausted', 'killed'])
         self.setdefault('createcooloff', ['created', 'killed', 'createpaused'])
         self.setdefault('submitcooloff', ['created', 'killed', 'submitpaused'])
         self.setdefault('jobcooloff', ['created', 'jobpaused', 'killed'])
+        self.setdefault('asocooloff', ['asopending', 'asopaused', 'killed'])
         self.setdefault('success', ['cleanout'])
         self.setdefault('exhausted', ['cleanout'])
         self.setdefault('killed', ['cleanout', 'killed'])
         self.setdefault('jobpaused', ['created', 'killed'])
         self.setdefault('createpaused', ['created', 'killed'])
         self.setdefault('submitpaused', ['created', 'killed'])
+        self.setdefault('asopaused', ['created', 'killed'])
+        self.setdefault('asopending', ['asofailed','complete','killed'])
+
 
     def states(self):
         """

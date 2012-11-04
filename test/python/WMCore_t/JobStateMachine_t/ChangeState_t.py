@@ -227,6 +227,9 @@ class TestChangeState(unittest.TestCase):
             self.assertEqual(couchJobDoc["_rev"], row["value"]["rev"],
                              "Error: Rev is wrong.")
 
+        change.propagate([testJobA, testJobB], "complete", "executing")
+        change.propagate([testJobA, testJobB], "pendingaso", "complete")
+            
         return
 
     def testUpdateFailedDoc(self):

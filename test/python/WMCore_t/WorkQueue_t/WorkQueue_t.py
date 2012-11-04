@@ -72,13 +72,13 @@ def syncQueues(queue):
 class WorkQueueTest(WorkQueueTestCase):
     """
     _WorkQueueTest_
-    
+
     """
     def setUp(self):
         """
         If we dont have a wmspec file create one
         """
-        EmulatorHelper.setEmulators(phedex = True, dbs = True, 
+        EmulatorHelper.setEmulators(phedex = True, dbs = True,
                                     siteDB = True, requestMgr = False)
         # undo any customizations
         Globals.GlobalParams.resetParams()
@@ -196,8 +196,8 @@ class WorkQueueTest(WorkQueueTestCase):
         #Delete WMBSAgent config file
         EmulatorSetup.deleteConfig(self.configFile)
         EmulatorHelper.resetEmulators()
-        
-    
+
+
     def createResubmitSpec(self, serverUrl, couchDB, parentage = False):
         """
         _createResubmitSpec_
@@ -223,7 +223,7 @@ class WorkQueueTest(WorkQueueTestCase):
                                         dataTier = "TIER2",
                                         lfnBase = "/store/dunkindonuts",
                                         mergedLFNBase = "/store/kfc")
-        
+
         dcs = DataCollectionService(url = serverUrl, database = couchDB)
 
         def getJob(workload):
@@ -244,12 +244,12 @@ class WorkQueueTest(WorkQueueTestCase):
         testJobA = getJob(workload)
         testJobA.addFile(testFileA)
         testJobA.addFile(testFileB)
-        
+
         dcs.failedJobs([testJobA])
         topLevelTask = workload.getTopLevelTask()[0]
-        workload.truncate("Resubmit_TestWorkload", topLevelTask.getPathName(), 
+        workload.truncate("Resubmit_TestWorkload", topLevelTask.getPathName(),
                           serverUrl, couchDB)
-                                  
+
         return workload
 
     def testProduction(self):
@@ -519,7 +519,7 @@ class WorkQueueTest(WorkQueueTestCase):
 
         self.localQueue.performQueueCleanupActions(skipWMBS = True) # will delete elements from local
         syncQueues(self.localQueue)
-        
+
         elements = self.globalQueue.status('Done')
         self.assertEqual(len(elements), 2)
         self.assertEqual([x['PercentComplete'] for x in elements], [100,100])
@@ -538,7 +538,7 @@ class WorkQueueTest(WorkQueueTestCase):
         """
         Test Multi top level task production spec.
         multiTaskProduction spec consist 2 top level tasks each task has event size 1000 and 2000
-        respectfully  
+        respectfully
         """
         #TODO: needs more rigorous test on each element per task
         # Basic production Spec
@@ -548,7 +548,7 @@ class WorkQueueTest(WorkQueueTestCase):
         spec.setSpecUrl(os.path.join(self.workDir, 'multiTaskProduction.spec'))
         spec.setOwnerDetails("evansde77", "DMWM", {'dn': 'MyDN'})
         spec.save(spec.specUrl())
-        
+
         specfile = spec.specUrl()
         numElements = 3
         njobs = [10] * numElements # array of jobs per block
@@ -931,7 +931,7 @@ class WorkQueueTest(WorkQueueTestCase):
         specfile = self.spec.specUrl()
         self.globalQueue.queueWork(specfile)
         self.assertEqual(1, len(self.globalQueue))
-        
+
         # queue work again
         self.globalQueue.queueWork(specfile)
         self.assertEqual(1, len(self.globalQueue))
@@ -982,12 +982,12 @@ class WorkQueueTest(WorkQueueTestCase):
         syncQueues(self.localQueue)
         self.assertEqual(len(self.localQueue.statusInbox(WorkflowName = self.spec.name())),
                          0)
-    
+
     def testResubmissionWorkflow(self):
         """Test workflow resubmission via ACDC"""
         acdcCouchDB = "workqueue_t_acdc"
         self.testInit.setupCouch(acdcCouchDB, "GroupUser", "ACDC")
-        
+
         spec = self.createResubmitSpec(self.testInit.couchUrl,
                                        acdcCouchDB)
         spec.setSpecUrl(os.path.join(self.workDir, 'resubmissionWorkflow.spec'))
@@ -1032,7 +1032,7 @@ class WorkQueueTest(WorkQueueTestCase):
         # pull works again
         self.assertEqual(self.localQueue.pullWork({'T2_XX_SiteA' : 1},
                                                   continuousReplication = False), 1)
-        
+
     def testSitesFromResourceControl(self):
         """Test sites from resource control"""
         # Most tests pull work for specific sites (to give us control)
@@ -1119,7 +1119,7 @@ class WorkQueueTest(WorkQueueTestCase):
                          True)
 
         #test not existing workflow
-        self.assertRaises(ValueError,
+        self.assertRaises(WorkQueueNoMatchingElements,
                           self.localQueue.getWMBSInjectionStatus,
                           "NotExistWorkflow"
                          )
@@ -1208,6 +1208,42 @@ class WorkQueueTest(WorkQueueTestCase):
         self.assertEqual(len(self.localQueue.status(status = 'Done')), 2)
         syncQueues(self.localQueue)
         self.assertEqual(len(self.globalQueue.status(status = 'Done')), 2)
+
+    def testOpenBlocks(self):
+        """New files added to open blocks are inserted correctly"""
+        # open block
+        Globals.GlobalParams.setBlocksOpenForWriting(True)
+        # queue as normal and inject 1 block to wmbs
+
+        self.globalQueue.queueWork(self.processingSpec.specUrl())
+        self.localQueue.pullWork({'T2_XX_SiteA' : 100, 'T2_XX_SiteB' : 100},
+                                 continuousReplication = False)
+        syncQueues(self.localQueue)
+        work = self.localQueue.getWork({'T2_XX_SiteA' : 1})
+        numFilesAdded = sum(x['NumOfFilesAdded'] for x in work)
+        self.assertEqual(numFilesAdded, Globals.GlobalParams.numOfFilesPerBlock())
+        # Add more files
+        Globals.GlobalParams.setNumOfFilesPerBlock(Globals.GlobalParams.numOfFilesPerBlock() + 3)
+        self.localQueue.performQueueCleanupActions()
+        newNumFilesAdded = sum(x['NumOfFilesAdded'] for x in self.localQueue.status())
+        self.assertEqual(newNumFilesAdded, Globals.GlobalParams.numOfFilesPerBlock())
+        self.assertNotEqual(numFilesAdded, newNumFilesAdded)
+        # ensure all current files injected but request does not appear ready for cleanup
+        work = self.localQueue.getWork({'T2_XX_SiteA' : 100, 'T2_XX_SiteB' : 100})
+        self.localQueue.performQueueCleanupActions()
+        newNumFilesAdded = sum(x['NumOfFilesAdded'] for x in self.localQueue.status())
+        self.assertFalse(self.localQueue.getWMBSInjectionStatus(self.processingSpec.name()))
+        # close blocks
+        Globals.GlobalParams.setBlocksOpenForWriting(False)
+        self.localQueue.performQueueCleanupActions()
+        # no new files should be added
+        Globals.GlobalParams.setNumOfFilesPerBlock(Globals.GlobalParams.numOfFilesPerBlock() + 3)
+        self.localQueue.performQueueCleanupActions()
+        newNumFilesAdded2 = sum(x['NumOfFilesAdded'] for x in self.localQueue.status())
+        self.assertEqual(newNumFilesAdded2, newNumFilesAdded)
+        # cleanup now progresses
+        syncQueues(self.localQueue)
+        self.assertTrue(self.localQueue.getWMBSInjectionStatus(self.processingSpec.name()))
 
 if __name__ == "__main__":
     unittest.main()

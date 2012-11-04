@@ -57,6 +57,7 @@ class TaskArchiverTest(unittest.TestCase):
     _setup_done = False
     _teardown = False
     _maxMessage = 10
+    OWNERDN = os.environ['OWNERDN'] if 'OWNERDN' in os.environ else "Generic/OWNERDN"
 
     def setUp(self):
         """
@@ -124,6 +125,7 @@ class TaskArchiverTest(unittest.TestCase):
         config.section_("JobStateMachine")
         config.JobStateMachine.couchurl     = os.getenv("COUCHURL", "cmssrv52.fnal.gov:5984")
         config.JobStateMachine.couchDBName  = self.databaseName
+        config.JobStateMachine.jobSummaryDBName = 'wmagent_summary'
 
         config.component_("JobCreator")
         config.JobCreator.jobCacheDir       = os.path.join(self.testDir, 'testDir')
@@ -158,6 +160,19 @@ class TaskArchiverTest(unittest.TestCase):
         config.Alert.address = "tcp://127.0.0.1:5557"
         config.Alert.controlAddr = "tcp://127.0.0.1:5559"
 
+        config.section_("BossAir")
+        config.BossAir.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
+        config.BossAir.gliteConf = '/afs/cern.ch/cms/LCG/LCG-2/UI/conf/glite_wms_CERN.conf'
+        config.BossAir.credentialDir = '/home/crab/ALL_SETUP/credentials/'
+        config.BossAir.gLiteProcesses = 2
+        config.BossAir.gLitePrefixEnv = "/lib64/"
+        config.BossAir.pluginNames = ["gLitePlugin"]
+        config.BossAir.proxyDir = "/tmp/credentials"
+        config.BossAir.manualProxyPath = os.environ['X509_USER_PROXY'] if 'X509_USER_PROXY' in os.environ else None
+
+        config.section_("Agent")
+        config.Agent.serverDN = "/we/bypass/myproxy/logon"
+
         return config
 
 
@@ -183,6 +198,7 @@ class TaskArchiverTest(unittest.TestCase):
 
 
     def createTestJobGroup(self, config, name = "TestWorkthrough",
+                           filesetName = "TestFileset",
                            specLocation = "spec.xml", error = False,
                            task = "/TestWorkload/ReReco", multicore = False):
         """
@@ -192,12 +208,12 @@ class TaskArchiverTest(unittest.TestCase):
 
         myThread = threading.currentThread()
 
-        testWorkflow = Workflow(spec = specLocation, owner = "Simon",
-                                name = name, task = task)
+        testWorkflow = Workflow(spec = specLocation, owner = self.OWNERDN,
+                                name = name, task = task, owner_vogroup="", owner_vorole="")
         testWorkflow.create()
         self.inject.execute(names = [name], injected = True)
 
-        testWMBSFileset = Fileset(name = name)
+        testWMBSFileset = Fileset(name = filesetName)
         testWMBSFileset.create()
 
         testFileA = File(lfn = "/this/is/a/lfnA" , size = 1024, events = 10)
@@ -205,7 +221,7 @@ class TaskArchiverTest(unittest.TestCase):
         testFileA.setLocation('malpaquet')
 
         testFileB = File(lfn = "/this/is/a/lfnB", size = 1024, events = 10)
-        testFileB.addRun(Run(10, *[12312]))
+        testFileB.addRun(Run(10, *[12314]))
         testFileB.setLocation('malpaquet')
 
         testFileA.create()
@@ -215,6 +231,19 @@ class TaskArchiverTest(unittest.TestCase):
         testWMBSFileset.addFile(testFileB)
         testWMBSFileset.commit()
         testWMBSFileset.markOpen(0)
+
+        outputWMBSFileset = Fileset(name = '%sOutput' % filesetName)
+        outputWMBSFileset.create()
+        testFileC = File(lfn = "/this/is/a/lfnC" , size = 1024, events = 10)
+        testFileC.addRun(Run(10, *[12312]))
+        testFileC.setLocation('malpaquet')
+        testFileC.create()
+        outputWMBSFileset.addFile(testFileC)
+        outputWMBSFileset.commit()
+        outputWMBSFileset.markOpen(0)
+
+        testWorkflow.addOutput('output', outputWMBSFileset)
+
 
         testSubscription = Subscription(fileset = testWMBSFileset,
                                         workflow = testWorkflow)
@@ -288,8 +317,8 @@ class TaskArchiverTest(unittest.TestCase):
         for i in range(0, nSubs):
             # Make a bunch of subscriptions
             localName = '%s-%i' % (name, i)
-            testWorkflow = Workflow(spec = spec, owner = "Simon",
-                                    name = localName, task="Test")
+            testWorkflow = Workflow(spec = spec, owner = self.OWNERDN,
+                                    name = localName, task="Test", owner_vogroup="", owner_vorole="")
             testWorkflow.create()
 
             testWMBSFileset = Fileset(name = localName)
@@ -375,7 +404,8 @@ class TaskArchiverTest(unittest.TestCase):
 
         # Create second workload
         testJobGroup2 = self.createTestJobGroup(config = config,
-                                                name = "%s_2" % workload.name(),
+                                                name = workload.name(),
+                                                filesetName = "TestFileset_2",
                                                 specLocation = workloadPath,
                                                 task = "/TestWorkload/ReReco/LogCollect")
 
@@ -402,7 +432,7 @@ class TaskArchiverTest(unittest.TestCase):
         jobs = jobdb.loadView("JobDump", "jobsByWorkflowName",
                               options = {"startkey": [workflowName],
                                          "endkey": [workflowName, {}]})['rows']
-        self.assertEqual(len(jobs), self.nJobs)
+        self.assertEqual(len(jobs), 2*self.nJobs)
 
         from WMCore.WMBS.CreateWMBSBase import CreateWMBSBase
         create = CreateWMBSBase()
@@ -443,14 +473,16 @@ class TaskArchiverTest(unittest.TestCase):
 
         # Check performance
         # Check histograms
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['AvgEventTime']['histogram'][0]['average'],
-                         0.062651899999999996)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['AvgEventTime']['histogram'][0]['average'],
+                                0.062651899999999996, places = 2)
         self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['AvgEventTime']['histogram'][0]['nEvents'],
                          5)
 
         # Check standard performance
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['TotalJobCPU']['average'], 9.4950600000000005)
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['TotalJobCPU']['stdDev'], 8.2912400000000002)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['TotalJobCPU']['average'], 9.4950600000000005,
+                                places = 2)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['TotalJobCPU']['stdDev'], 8.2912400000000002,
+                                places = 2)
 
         # Check worstOffenders
         self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['AvgEventTime']['worstOffenders'],
@@ -467,8 +499,9 @@ class TaskArchiverTest(unittest.TestCase):
             if x in config.TaskArchiver.histogramKeys:
                 continue
             for y in ['average', 'stdDev']:
-                self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco/LogCollect']['cmsRun1'][x][y],
-                                 workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1'][x][y])
+                self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco/LogCollect']['cmsRun1'][x][y],
+                                        workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1'][x][y],
+                                        places = 2)
 
         # The TestWorkload should have no jobs left
         workflowName = "TestWorkload"
@@ -482,7 +515,7 @@ class TaskArchiverTest(unittest.TestCase):
         self.assertEqual(len(jobs), 0)
         return
 
-    def atestB_testErrors(self):
+    def testB_testErrors(self):
         """
         _testErrors_
 
@@ -509,14 +542,15 @@ class TaskArchiverTest(unittest.TestCase):
 
         dbname       = getattr(config.JobStateMachine, "couchDBName")
         couchdb      = CouchServer(config.JobStateMachine.couchurl)
-        workdatabase = couchdb.connectDatabase(dbname)
+        workdatabase = couchdb.connectDatabase("%s/workloadsummary" % dbname)
 
-        workloadSummary = workdatabase.document(id = "TestWorkload")
+        workloadSummary = workdatabase.document(id = workload.name())
 
-        self.assertEqual(workloadSummary['/TestWorkload/ReReco']['failureTime'], 500)
-        self.assertTrue(workloadSummary['/TestWorkload/ReReco']['cmsRun1'].has_key('99999'))
+        self.assertEqual(workloadSummary['errors']['/TestWorkload/ReReco']['failureTime'], 500)
+        self.assertTrue(workloadSummary['errors']['/TestWorkload/ReReco']['cmsRun1'].has_key('99999'))
+        self.assertEquals(workloadSummary['errors']['/TestWorkload/ReReco']['cmsRun1']['99999']['runs'], {'10' : [12312]},
+                          "Wrong lumi information in the summary for failed jobs")
         return
-
 
     def atestC_Profile(self):
         """
@@ -525,9 +559,9 @@ class TaskArchiverTest(unittest.TestCase):
         DON'T RUN THIS!
         """
 
-        import cProfile, pstats
-
         return
+
+        import cProfile, pstats
 
         myThread = threading.currentThread()
 
@@ -550,8 +584,6 @@ class TaskArchiverTest(unittest.TestCase):
 
 
         return
-
-
 
     def atestD_Timing(self):
         """
@@ -687,28 +719,35 @@ class TaskArchiverTest(unittest.TestCase):
         os.makedirs(cachePath)
         self.assertTrue(os.path.exists(cachePath))
 
-        workflowName = "TestWorkload"
         dbname       = config.TaskArchiver.workloadSummaryCouchDBName
         couchdb      = CouchServer(config.JobStateMachine.couchurl)
         workdatabase = couchdb.connectDatabase(dbname)
-        jobdb        = couchdb.connectDatabase("%s/jobs" % self.databaseName)
-        fwjrdb       = couchdb.connectDatabase("%s/fwjrs" % self.databaseName)
 
         testTaskArchiver = TaskArchiverPoller(config = config)
         testTaskArchiver.algorithm()
 
+        result = myThread.dbi.processData("SELECT * FROM wmbs_job")[0].fetchall()
+        self.assertEqual(len(result), 0, "No job should have survived")
+        result = myThread.dbi.processData("SELECT * FROM wmbs_subscription")[0].fetchall()
+        self.assertEqual(len(result), 0)
+        result = myThread.dbi.processData("SELECT * FROM wmbs_jobgroup")[0].fetchall()
+        self.assertEqual(len(result), 0)
+        result = myThread.dbi.processData("SELECT * FROM wmbs_file_details")[0].fetchall()
+        self.assertEqual(len(result), 0)
+
         workloadSummary = workdatabase.document(id = "TestWorkload")
 
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['minMergeTime']['average'],
-                         5.7624950408900002)
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['numberOfMerges']['average'],
-                         3.0)
-        self.assertEqual(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['averageProcessTime']['average'],
-                         29.369966666700002)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['minMergeTime']['average'],
+                         5.7624950408900002, places = 2)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['numberOfMerges']['average'],
+                         3.0, places = 2)
+        self.assertAlmostEquals(workloadSummary['performance']['/TestWorkload/ReReco']['cmsRun1']['averageProcessTime']['average'],
+                         29.369966666700002, places = 2)
         return
 
 
-    # Requires a running UserFileCache to succeed
+    # Requires a running UserFileCache to succeed. https://cmsweb.cern.ch worked for me
+    # The environment variable OWNERDN needs to be set. Used to retrieve an already delegated proxy and contact the ufc
     @attr('integration')
     def testPublishJSONCreate(self):
         """

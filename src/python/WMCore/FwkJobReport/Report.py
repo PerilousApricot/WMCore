@@ -323,7 +323,7 @@ class Report:
         handle.close()
         return
 
-    def unpersist(self, filename):
+    def unpersist(self, filename, reportname = None):
         """
         _unpersist_
 
@@ -332,6 +332,11 @@ class Report:
         handle = open(filename, 'r')
         self.data = cPickle.load(handle)
         handle.close()
+
+        # old self.report (if it existed) became unattached
+        if reportname:
+            self.report = getattr(self.data, reportname)
+
         return
 
     def addOutputModule(self, moduleName):
@@ -467,8 +472,6 @@ class Report:
         # All right, the rest should be JSONalizable python primitives
         for entry in keyList:
             setattr(fileRef, entry, attrs[entry])
-
-
 
         return fileRef
 
@@ -981,6 +984,28 @@ class Report:
 
         return
 
+    def deleteOutputModuleForStep(self, stepName, moduleName):
+        """
+        _deleteOutputModuleForStep_
+
+        Delete any reference to the given output module in the step report
+        that includes deleting any output file it produced
+        """
+        stepReport = self.retrieveStep(step = stepName)
+
+        if not stepReport:
+            return
+
+        listOfModules = getattr(stepReport, 'outputModules', [])
+
+        if moduleName not in listOfModules:
+            return
+
+        delattr(stepReport.output, moduleName)
+        listOfModules.remove(moduleName)
+
+        return
+
     def setStepStartTime(self, stepName):
         """
         _setStepStatus_
@@ -1287,7 +1312,7 @@ class Report:
         _stripInputFiles_
 
         If we need to compact the FWJR the easiest way is just to
-        trim the number of input files.  
+        trim the number of input files.
         """
 
         for stepName in self.data.steps:
@@ -1322,5 +1347,3 @@ def addFiles(file1, file2):
                     if l not in thisRun.lumis:
                         thisRun.lumis.append(l)
     return
-
-

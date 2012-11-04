@@ -72,29 +72,6 @@ def installWorkQueueCouchApp(couchUrl, couchDBName):
     finally:
         shutil.rmtree(tempDir, ignore_errors = True)
 
-def createSymLinkWMStatsExternal():
-    """WMStats has to install jquery libraries to couchapp - handle this here"""
-    
-    def createSymLink(source):
-        for file in os.listdir(source):
-            dest = os.path.join(externalDir, file)
-            if not os.path.exists(dest):
-                os.symlink(os.path.join(source, file), dest)
-                
-    jquery = os.path.join(os.environ.get('JQUERY_ROOT', ''), 'data', 'jquery')
-    jquery_ui = os.path.join(os.environ.get('JQUERY_UI_ROOT', ''), 'data', 'jquery-ui')
-    jquery_datatables = os.path.join(os.environ.get('JQUERY_DATATABLES_ROOT', ''), 'data', 'jquery-dataTables')
-    if not (jquery or jquery_ui or jquery_datatables):
-        raise RuntimeError, "Can't locate jquery jquery-ui jquery-datatables lib"
-    basePath = couchAppRoot('WMStats')
-    # make a temporary directory to create the couchapp structure
-    externalDir = os.path.join(basePath, 'WMStats', '_attachments', 'lib')
-    
-    createSymLink(jquery)
-    createSymLink(jquery_ui)
-    createSymLink(jquery_datatables)
-
-
 def createCronEntires(crontabLines):
     tempDir = tempfile.mkdtemp()
     os.system("crontab -l > %s/crontab" % tempDir)
@@ -133,22 +110,6 @@ def setupCron(couchUrl, couchDBName):
     crontabLines.append("* * * * * %s\n" % (indexCmd % indexFwjrUrl))
     crontabLines.append("0 0 * * * %s\n" % (compactCmd % compactViewUrl))
     crontabLines.append("0 0 * * * %s\n" % (compactCmd % compactDBUrl))
-    createCronEntires(crontabLines)
-
-
-def setupCronForAlerts(couchUrl, couchDBName, couchAppName):
-    """
-    Like above, set up periodic CouchDB views queries for the alertcollector DB.
-    Shall need no % character hacking as the above.
-
-    """
-    print "Setting up cron jobs for '%s'" % couchDBName
-    views = ("all", "byhostname", "byhostnamebysource", "bysource", "hostnames", "sources")
-    # couchUrl, couchDBName, couchAppName, viewName
-    urlBase = "%s/%s/_design/%s/_view/%s?limit=1"
-    urls = [urlBase % (couchUrl, couchDBName, couchAppName, viewName) for viewName in views]
-    commands = ["curl -s '%s' > /dev/null" % url for url in urls]
-    crontabLines = ["* * * * * %s\n" % command for command in commands]
     createCronEntires(crontabLines)
 
 
@@ -383,15 +344,6 @@ if __name__ == "__main__":
         installCouchApp(wmagentConfig.reqmgr.couchUrl, wmagentConfig.reqmgr.wmstatDBName, "WMStats")
         if options.cron:
             setupCronCompaction(wmagentConfig.reqmgr.couchUrl, wmagentConfig.reqmgr.workloadDBName)
-
-    # this will be removed once AlertCollector is moved behind cmsweb
-    if hasattr(wmagentConfig, "AlertProcessor"):
-        uri = wmagentConfig.AlertProcessor.critical.sinks.rest.uri
-        dbName = uri.split('/')[-1]
-        dbAddr = "/".join(uri.split('/')[0:-1])
-        installCouchApp(dbAddr, dbName, "Alerts")
-        if options.cron:
-            setupCronForAlerts(dbAddr, dbName, "Alerts")
 
 
     sys.exit(0)

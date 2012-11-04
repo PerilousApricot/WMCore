@@ -76,18 +76,38 @@ Memory (Mbytes): <input type="text" name="Memory" size=10 value=2147483648 />
 Size per event (Kbytes): <input type="text" name="SizePerEvent" size=10 value=512000 /><br/>
 #end def
 
+#def dqmOptions
+<input type="checkbox" name="EnableDQMHarvest"/>Enable DQM Harvesting<br/>
+DQM Sequences: <input type="text" name="DqmSequences" size=40 />
+DQM URL:
+<select name="DQMUploadUrl">
+    <option selected> https://cmsweb.cern.ch/dqm/dev </option>
+    <option> https://cmsweb.cern.ch/dqm/offline </option>
+    <option> https://cmsweb.cern.ch/dqm/relval </option>
+    <option> https://cmsweb-testbed.cern.ch/dqm/dev </option>
+    <option> https://cmsweb-testbed.cern.ch/dqm/offline </option>
+    <option> https://cmsweb-testbed.cern.ch/dqm/relval </option>
+</select><br/>
+
+#end def
+
+#def scenarioBlock
+Scenario:
+  <select name="ProcScenario">
+    <option selected> pp</option>
+    <option>cosmics</option>
+    <option>hcalnzs</option>
+    <option>preprodmc</option>
+    <option>prodmc</option>
+    <option>relvalmc</option>
+    <option>relvalmcfs</option>
+  </select><br/>
+#end def
+
 #def configBlock($radioName, $scenarioName, $cacheName, $type)
 Configuration <br>
-  <input type="radio" name=$radioName value="scenario" /> Scenario
-    <select name="Scenario">
-      <option selected> pp</option>
-      <option>cosmics</option>
-      <option>hcalnzs</option>
-      <option>preprodmc</option>
-      <option>prodmc</option>
-      <option>relvalmc</option>
-      <option>relvalmcfs</option>
-    </select><br/>
+  <input type="radio" name=$radioName value="scenario" /> Scenario <br/>
+  $scenarioBlock
   <input type="radio" name=$radioName value="couchDB" /> $type ConfigCache ID
     <!--<input type="text" name="$cacheName" size=80 />
     <select name=$cacheName>
@@ -99,9 +119,7 @@ Configuration <br>
        <input name="$cacheName" size=80 id="couchinput" type="text">
        <div id="couchcontainer"></div>
     </div>
-  <br/>
-
-Global Tag: <input type="text" name="GlobalTag" size=20 value=""/> &nbsp &nbsp
+Global Tag: <input type="text" name="GlobalTag" size=20 value=""/> &nbsp &nbsp <br>
 #end def
 
 #def campaignBlock
@@ -192,7 +210,8 @@ First lumi: <input type="text" name="FirstLumi" size=10 value=1 /><br/>
             $softwareBlock
 Include Parents: <select name="IncludeParents"><option>True</option><option selected>False</option></select><br/>
             $campaignBlock
-            $configBlock("inputMode", "Scenario", "ProcConfigCacheID", "Reco")
+            $configBlock("inputMode", "Scenario", "ConfigCacheID", "Reco")
+            $dqmOptions
             $ioBlock
             $skimBlock
             $runBlockBlock
@@ -207,7 +226,7 @@ Filter efficiency: <input type="text" name="FilterEfficiency" size=10 value=1.0 
 Total job time: <input type="text" name="TotalTime", value=32400 /><br/>
             $performanceBlock
             $initialLumiEventBlock
-            $configBlock("inputMode", "Scenario", "ProcConfigCacheID", "MC")
+            $configBlock("inputMode", "Scenario", "ConfigCacheID", "MC")
 Primary Dataset: <input type="text" name="PrimaryDataset" size=40 /><br/>
 Data Pileup: <input type="text" name="DataPileup" size=80 /><br/>
 MC Pileup: <input type="text" name="MCPileup" size=80 /><br/>
@@ -248,7 +267,8 @@ CMS Path: <input type="text" name="CmsPath" size=50/><br/>
 Include Parents: <select name="IncludeParents"><option>True</option><option selected>False</option></select><br/>
             $campaignBlock
 Multicore: <input type="text" name="Multicore" size=2 value="" /> <br/>
-            $configBlock("inputMode", "Scenario", "ProcConfigCacheID", "Processing")
+            $configBlock("inputMode", "Scenario", "ConfigCacheID", "Processing")
+            $dqmOptions
             $ioBlock
             $runBlockBlock
             $performanceBlock
@@ -260,6 +280,7 @@ Original Request Name: <input type="text" name="OriginalRequestName" size=30/> <
 Initial Task Path: <input type="text" name="InitialTaskPath" size=30/><br/>
 ACDC Server URL: <input type="text" name="ACDCServer" size=30/><br/>
 ACDC Database Name: <input type="text" name="ACDCDatabase" size=30/><br/>
+Ignored Output Modules: <input type="text" name="IgnoredOutputModules" size=40/><br/>
             $performanceBlock
             $trailerBlock("Resubmission")
         </div>
@@ -270,6 +291,8 @@ Include Parents: <select name="IncludeParents"><option>True</option><option sele
             $campaignBlock
             $ioBlock
 <br/>
+            $scenarioBlock
+            $dqmOptions
 Step One CacheCache ID: <input type="text" name="StepOneConfigCacheID" size=80 /><br/>
 Step One Output Module Name: <input type="text" name="StepOneOutputModuleName" size=20 /><br/>
 Step Two CacheCache ID: <input type="text" name="StepTwoConfigCacheID" size=80 /><br/>
@@ -288,7 +311,7 @@ MC Pileup: <input type="text" name="MCPileup" size=80 /><br/>
             $headerBlock
             $softwareBlock
             $campaignBlock
-ConfigCache ID: <input type="text" name="ProcConfigCacheID" size=80 /><br/>
+ConfigCache ID: <input type="text" name="ConfigCacheID" size=80 /><br/>
 Global Tag: <input type="text" name="GlobalTag" size=20 value=""/><br/>
             $ioBlock
             $runBlockBlock
@@ -299,12 +322,11 @@ Global Tag: <input type="text" name="GlobalTag" size=20 value=""/><br/>
             $headerBlock
             $softwareBlock
 # of Events: <input type="text" name="RequestNumEvents" size=10 value=1000 />
-Time per event: <input type="text" name="TimePerEvent" size=10 value=60 />
-Filter efficiency: <input type="text" name="FilterEfficiency" size=10 value=1.0 />
+Filter efficiency: <input type="text" name="FilterEfficiency" size=10 value=1.0 /><br/>
 Total job time: <input type="text" name="TotalTime", value=32400 />
 # of Events per luminosity block: <input type="text" name="EventsPerLumi" size=10 value=100 /><br/>
 	    $initialLumiEventBlock
-ConfigCache ID: <input type="text" name="ProcConfigCacheID" size=80 /><br/>
+ConfigCache ID: <input type="text" name="ConfigCacheID" size=80 /><br/>
 Global Tag: <input type="text" name="GlobalTag" size=20 value=""/><br/>
 Primary Dataset: <input type="text" name="PrimaryDataset" size=40 /><br/>
 Data Pileup: <input type="text" name="DataPileup" size=80 /><br/>

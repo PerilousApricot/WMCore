@@ -35,13 +35,13 @@ class ChangeState(WMObject, WMConnectionBase):
 
         try:
             self.couchdb = CouchServer(self.config.JobStateMachine.couchurl)
-            self.jobsdatabase = self.couchdb.connectDatabase("%s/jobs" % self.dbname)
-            self.fwjrdatabase = self.couchdb.connectDatabase("%s/fwjrs" % self.dbname)
-            self.jsumdatabase = self.couchdb.connectDatabase( getattr(self.config.JobStateMachine, 'jobSummaryDBName') )
+            self.jobsdatabase = self.couchdb.connectDatabase("%s/jobs" % self.dbname, size = 250)
+            self.fwjrdatabase = self.couchdb.connectDatabase("%s/fwjrs" % self.dbname, size = 250)
+            self.jsumdatabase = self.couchdb.connectDatabase( getattr(self.config.JobStateMachine, 'jobSummaryDBName'), size = 250 )
         except Exception, ex:
             logging.error("Error connecting to couch: %s" % str(ex))
             self.jobsdatabase = None
-            self.fwjrdatabase = None            
+            self.fwjrdatabase = None
             self.jsumdatabase = None
 
         try:
@@ -236,31 +236,34 @@ class ChangeState(WMObject, WMConnectionBase):
                 logging.debug("Pushing job summary for job %s" % jobSummaryId)
                 errmsgs = {}
                 inputs = []
-                for step in fwjrDocument["fwjr"]["steps"]:
-                    if "errors" in fwjrDocument["fwjr"]["steps"][step]:
-                        errmsgs[step] = [error for error in fwjrDocument["fwjr"]["steps"][step]["errors"]]
-                    if "input" in fwjrDocument["fwjr"]["steps"][step] and "source" in fwjrDocument["fwjr"]["steps"][step]["input"]:
-                        inputs.extend( [source["runs"] for source in fwjrDocument["fwjr"]['steps'][step]["input"]["source"] if "runs" in source] )
+                if "steps" in fwjrDocument["fwjr"]:
+                    for step in fwjrDocument["fwjr"]["steps"]:
+                        if "errors" in fwjrDocument["fwjr"]["steps"][step]:
+                            errmsgs[step] = [error for error in fwjrDocument["fwjr"]["steps"][step]["errors"]]
+                        if "input" in fwjrDocument["fwjr"]["steps"][step] and "source" in fwjrDocument["fwjr"]["steps"][step]["input"]:
+                            inputs.extend( [source["runs"] for source in fwjrDocument["fwjr"]['steps'][step]["input"]["source"] if "runs" in source] )
 
                 outputs = []
                 outputDataset = None
-                for singlestep in job["fwjr"].listSteps(): 
-                    for singlefile in job["fwjr"].getAllFilesFromStep(step=singlestep): 
-                        if singlefile: 
-                            outputs.append({'type': 'output' if CMSSTEP.match(singlestep) else singlefile.get('module_label', None), 
-                                            'lfn': singlefile.get('lfn', None), 
-                                            'location': list(singlefile.get('locations', set([]))) if len(singlefile.get('locations', set([]))) > 1 
-                                                                                                   else singlefile['locations'].pop(), 
-                                            'checksums': singlefile.get('checksums', {}), 
-                                            'size': singlefile.get('size', None) }) 
+                for singlestep in job["fwjr"].listSteps():
+                    for singlefile in job["fwjr"].getAllFilesFromStep(step=singlestep):
+                        if singlefile:
+                            outputs.append({'type': 'output' if CMSSTEP.match(singlestep) else singlefile.get('module_label', None),
+                                            'lfn': singlefile.get('lfn', None),
+                                            'location': list(singlefile.get('locations', set([]))) if len(singlefile.get('locations', set([]))) > 1
+                                                                                                   else singlefile['locations'].pop(),
+                                            'checksums': singlefile.get('checksums', {}),
+                                            'size': singlefile.get('size', None) })
                             #it should have one output dataset for all the files
-                            outputDataset = singlefile.get('dataset', None) if not outputDataset else outputDataset 
+                            outputDataset = singlefile.get('dataset', None) if not outputDataset else outputDataset
 
                 jobSummary = {"_id": jobSummaryId,
+                              "wmbsid": job["id"],
                               "type": "jobsummary",
                               "retrycount": job["retry_count"],
                               "workflow": job["workflow"],
                               "task": job["task"],
+                              "jobtype": job["jobType"],
                               "state": newstate,
                               "site": job["fwjr"].getSiteName(),
                               "exitcode": job["fwjr"].getExitCode(),
@@ -368,7 +371,8 @@ class ChangeState(WMObject, WMConnectionBase):
         for idx, job in enumerate(jobs):
             if job["couch_record"] == None:
                 jobIDsToCheck.append(job["id"])
-            if job.get("task", None) == None or job.get("workflow", None) == None:
+            if job.get("task", None) == None or job.get("workflow", None) == None \
+                or job.get("taskType", None) == None or job.get("jobType", None) == None:
                 jobTasksToCheck.append(job["id"])
             jobMap[job["id"]] = idx
 
@@ -388,16 +392,10 @@ class ChangeState(WMObject, WMConnectionBase):
                 jobs[idx]["task"] = jobTask["task"]
                 jobs[idx]["workflow"] = jobTask["name"]
                 jobs[idx]["taskType"] = jobTask["type"]
+                jobs[idx]["jobType"]  = jobTask["subtype"]
 
     def completeCreatedJobsInformation(self, jobs, incrementRetry = False):
-        jobIDsToCheck = []
-        jobMap = {}
-        for idx, job in enumerate(jobs):
-            #Check if the job already has a jobType defined, which is likely
-            #only if it comes from the JobCreator component
-            if "jobType" not in job:
-                jobIDsToCheck.append(job["id"])
-                jobMap[job["id"]] = idx
+        for job in jobs:
             #It there's no jobID in the mask then it's not loaded
             if "jobID" not in job["mask"]:
                 #Make sure the daofactory was not stripped
@@ -406,18 +404,8 @@ class ChangeState(WMObject, WMConnectionBase):
             #If the mask is event based, then we have info to report
             if job["mask"]["LastEvent"] != None and \
                job["mask"]["FirstEvent"] != None and job["mask"]['inclusivemask']:
-                job["nEventsToProc"] = int(job["mask"]["LastEvent"] - 
+                job["nEventsToProc"] = int(job["mask"]["LastEvent"] -
                                             job["mask"]["FirstEvent"])
             #Increment retry when commanded
             if incrementRetry:
                 job["retry_count"] += 1
-
-        #Let's continue with the jobTypes, get all the types at once and add them
-        #to the jobs
-        if len(jobIDsToCheck) > 0 :
-            jobTypes = self.jobTypeDAO.execute(jobID = jobIDsToCheck,
-                                               conn = self.getDBConn(),
-                                               transaction = self.existingTransaction())
-            for jobType in jobTypes:
-                idx = jobMap[jobType["id"]]
-                jobs[idx]["jobType"] = jobType["type"]

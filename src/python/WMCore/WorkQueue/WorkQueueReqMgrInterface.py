@@ -89,6 +89,7 @@ class WorkQueueReqMgrInterface():
                 # temporary problem - try again later
                 msg = 'Error processing request "%s": will try again later.' \
                 '\nError: "%s"' % (reqName, str(ex))
+                self.logger.info(msg)
                 self.sendMessage(reqName, msg)
                 continue
             except Exception, ex:
@@ -173,6 +174,8 @@ class WorkQueueReqMgrInterface():
     def getAvailableRequests(self, *teams):
         """Get requests for the given teams"""
         results = []
+        if not teams:
+            teams = self.reqMgr.getTeam()
         for team in teams:
             try:
                 reqs = self.reqMgr.getAssignment(team)

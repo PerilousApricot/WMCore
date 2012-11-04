@@ -38,7 +38,7 @@ class Registry:
 
 
 
-    
+
 
 def registerStageOutImpl(name, classRef):
     """
@@ -51,7 +51,7 @@ def registerStageOutImpl(name, classRef):
         msg = "Duplicate StageOutImpl registered for name: %s\n" % name
         raise RegistryError, msg
 
-    
+
     if not issubclass(classRef, StageOutImpl):
         msg = "StageOutImpl object registered as %s\n" % name
         msg += "is not a subclass of StageOut.StageOutImpl\n"
@@ -67,21 +67,20 @@ def retrieveStageOutImpl(name, stagein=False, useNewVersion = False):
     _retrieveStageOutImpl_
 
     Get the matching impl class and return an instance of it
-    
+
     """
     if not useNewVersion:
         classRef  = Registry.StageOutImpl.get(name, None)
     else:
-        return _retrieveStageOutImpl2(name)
-    
-    if classRef == None:
-        msg = "Failed to find StageOutImpl for name: %s\n" % name
-        raise RegistryError, msg
-    
+        try:
+            return _retrieveStageOutImpl2(name)
+        except ImportError:
+            raise RegistryError, "Stageout plugin %s doesn't exist" % name
+
     if not useNewVersion:
         return classRef(stagein)
     else:
-        return classRef()   
+        return classRef()
 
 pluginLookup = { 'test-win' : 'TestWinImpl',
                 'test-fail' : 'TestFailImpl',
@@ -96,11 +95,15 @@ pluginLookup = { 'test-win' : 'TestWinImpl',
                 "rfcp-2": 'RFCP2Impl',
                 "rfcp-CERN": 'RFCPCERNImpl',
                 "rfcp": 'RFCPImpl',
+                "stageout-fnal": 'FNALImpl',
                 "srm-fnal": 'SRMImpl',
                 "srm": 'SRMImpl',
                 "srmv2": 'SRMV2Impl',
                 "xrdcp": 'XRDCPImpl',
-                "vandy": 'VandyImpl'}
+                "vandy": 'VandyImpl',
+                # NOTE NOTE NOTE:
+                # do NOT implement this
+                "testFallbackToOldBackend" : 'TestBackendForFallbacksDontImplement'}
 
 def _retrieveStageOutImpl2(backendName):
     factory = WMCore.WMFactory.WMFactory(name = 'StageOutFactory',
@@ -108,4 +111,3 @@ def _retrieveStageOutImpl2(backendName):
     className = pluginLookup[backendName]
     stageout = factory.loadObject(className)
     return stageout
-    

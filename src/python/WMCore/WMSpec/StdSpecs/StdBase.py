@@ -83,6 +83,13 @@ class StdBase(object):
         self.timePerEvent = 60
         self.memory = 2000
         self.sizePerEvent = 512
+        self.periodicHarvestingInterval = 0
+        self.dqmUploadProxy = None
+        self.dqmUploadUrl = None
+        self.dqmSequences = None
+        self.procScenario = None
+        self.enableHarvesting = True
+        self.enableNewStageout = False
         return
 
     def __call__(self, workloadName, arguments):
@@ -122,6 +129,13 @@ class StdBase(object):
         self.timePerEvent = int(arguments.get("TimePerEvent", 60))
         self.memory = int(arguments.get("Memory", 2000))
         self.sizePerEvent = int(arguments.get("SizePerEvent", 512))
+        self.periodicHarvestingInterval = int(arguments.get("PeriodicHarvest", 0))
+        self.dqmUploadProxy = arguments.get("DQMUploadProxy", None)
+        self.dqmUploadUrl = arguments.get("DQMUploadUrl", "https://cmsweb.cern.ch/dqm/dev")
+        self.dqmSequences = arguments.get("DqmSequences", [])
+        self.procScenario = arguments.get("ProcScenario", None)
+        self.enableHarvesting = arguments.get("EnableHarvesting", True)
+        self.enableNewStageout = arguments.get("EnableNewStageout", False)
 
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True
@@ -143,7 +157,7 @@ class StdBase(object):
 
     def determineOutputModules(self, scenarioFunc = None, scenarioArgs = None,
                                configDoc = None, couchURL = None,
-                               couchDBName = None):
+                               couchDBName = None, configCacheUrl = None):
         """
         _determineOutputModules_
 
@@ -152,7 +166,8 @@ class StdBase(object):
         """
         outputModules = {}
         if configDoc != None and configDoc != "":
-            configCache = ConfigCache(couchURL, couchDBName)
+            url = configCacheUrl or couchURL
+            configCache = ConfigCache(url, couchDBName)
             configCache.loadByID(configDoc)
             outputModules = configCache.getOutputModuleInfo()
         else:
@@ -173,7 +188,11 @@ class StdBase(object):
             elif scenarioFunc == "alcaSkim":
                 for alcaSkim in scenarioArgs.get('skims',[]):
                     moduleLabel = "ALCARECOStream%s" % alcaSkim
-                    outputModules[moduleLabel] = { 'dataTier' : "ALCARECO",
+                    if alcaSkim == "PromptCalibProd":
+                        dataTier = "ALCAPROMPT"
+                    else:
+                        dataTier = "ALCARECO"
+                    outputModules[moduleLabel] = { 'dataTier' : dataTier,
                                                    'primaryDataset' : scenarioArgs.get('primaryDataset'),
                                                    'filterName' : alcaSkim }
 
@@ -266,8 +285,8 @@ class StdBase(object):
                             userDN = None, asyncDest = None, owner_vogroup = "DEFAULT",
                             owner_vorole = "DEFAULT", stepType = "CMSSW",
                             userSandbox = None, userFiles = [], primarySubType = None,
-                            forceMerged = False, forceUnmerged = False):
-
+                            forceMerged = False, forceUnmerged = False,
+                            configCacheUrl = None):
         """
         _setupProcessingTask_
 
@@ -285,6 +304,7 @@ class StdBase(object):
           configDoc empty - Use a Configuration.DataProcessing config.  The
             scenarioName, scenarioFunc and scenarioArgs parameters must not be
             empty.
+          if configCacheUrl is not empty, use that plus couchDBName + configDoc if not empty  
 
         The seeding and totalEvents parameters are only used for production jobs.
         """
@@ -296,8 +316,11 @@ class StdBase(object):
         procTaskStageOut.setUserDN(userDN)
         procTaskStageOut.setAsyncDest(asyncDest)
         procTaskStageOut.setUserRoleAndGroup(owner_vogroup, owner_vorole)
+        procTaskStageOut.setNewStageoutOverride(self.enableNewStageout)
         procTaskLogArch = procTaskCmssw.addStep("logArch1")
         procTaskLogArch.setStepType("LogArchive")
+        procTaskLogArch.setNewStageoutOverride(self.enableNewStageout)
+        
         procTask.applyTemplates()
         procTask.setTaskPriority(self.priority)
 
@@ -358,7 +381,8 @@ class StdBase(object):
         procTaskCmsswHelper.setEventsPerLumi(eventsPerLumi)
 
         configOutput = self.determineOutputModules(scenarioFunc, scenarioArgs,
-                                                   configDoc, couchURL, couchDBName)
+                                                   configDoc, couchURL, couchDBName,
+                                                   configCacheUrl=configCacheUrl)
         outputModules = {}
         for outputModuleName in configOutput.keys():
             outputModule = self.addOutputModule(procTask,
@@ -371,7 +395,10 @@ class StdBase(object):
             outputModules[outputModuleName] = outputModule
 
         if configDoc != None and configDoc != "":
-            procTaskCmsswHelper.setConfigCache(couchURL, configDoc, couchDBName)
+            if configCacheUrl:
+                procTaskCmsswHelper.setConfigCache(configCacheUrl, configDoc, couchDBName)
+            else:
+                procTaskCmsswHelper.setConfigCache(couchURL, configDoc, couchDBName)
         else:
             # delete dataset information from scenarioArgs
             if 'outputs' in scenarioArgs:
@@ -490,6 +517,7 @@ class StdBase(object):
         self.addDashboardMonitoring(logCollectTask)
         logCollectStep = logCollectTask.makeStep("logCollect1")
         logCollectStep.setStepType("LogCollect")
+        logCollectStep.setNewStageoutOverride(self.enableNewStageout)
         logCollectTask.applyTemplates()
         logCollectTask.setSplittingAlgorithm("MinFileBased", files_per_job = filesPerJob)
         logCollectTask.setTaskType("LogCollect")
@@ -499,7 +527,8 @@ class StdBase(object):
         return logCollectTask
 
     def addMergeTask(self, parentTask, parentTaskSplitting, parentOutputModuleName,
-                     parentStepName = "cmsRun1", doLogCollect = True):
+                     parentStepName = "cmsRun1", doLogCollect = True,
+                     lfn_counter = 0):
         """
         _addMergeTask_
 
@@ -512,8 +541,12 @@ class StdBase(object):
 
         mergeTaskStageOut = mergeTaskCmssw.addStep("stageOut1")
         mergeTaskStageOut.setStepType("StageOut")
+        mergeTaskStageOut.setNewStageoutOverride(self.enableNewStageout)
+
         mergeTaskLogArch = mergeTaskCmssw.addStep("logArch1")
         mergeTaskLogArch.setStepType("LogArchive")
+        mergeTaskLogArch.setNewStageoutOverride(self.enableNewStageout)
+
 
         mergeTask.setTaskLogBaseLFN(self.unmergedLFNBase)
         if doLogCollect:
@@ -541,30 +574,18 @@ class StdBase(object):
         mergeTaskCmsswHelper.setGlobalTag(self.globalTag)
         mergeTaskCmsswHelper.setOverrideCatalog(self.overrideCatalog)
 
-        if getattr(parentOutputModule, "dataTier") in ["DQM", "DQMROOT"]:
-            # DQM wants everything to be a single file per run, so we'll merge
-            # accordingly.  We'll set the max_wait_time to two weeks as files
-            # tend to be garbage collected after that. Also effectively disable
-            # size thresholds for DQM merges (they do not apply).
-            mergeTask.setSplittingAlgorithm(splitAlgo,
-                                            max_merge_size = 21000000000,
-                                            min_merge_size = 20000000000,
-                                            max_merge_events = 21000000000,
-                                            max_wait_time = 14 * 24 * 3600,
-                                            merge_across_runs = False,
-                                            siteWhitelist = self.siteWhitelist,
-                                            siteBlacklist = self.siteBlacklist)
-        else:
-            mergeTask.setSplittingAlgorithm(splitAlgo,
-                                            max_merge_size = self.maxMergeSize,
-                                            min_merge_size = self.minMergeSize,
-                                            max_merge_events = self.maxMergeEvents,
-                                            max_wait_time = self.maxWaitTime,
-                                            siteWhitelist = self.siteWhitelist,
-                                            siteBlacklist = self.siteBlacklist)
+        mergeTask.setSplittingAlgorithm(splitAlgo,
+                                        max_merge_size = self.maxMergeSize,
+                                        min_merge_size = self.minMergeSize,
+                                        max_merge_events = self.maxMergeEvents,
+                                        max_wait_time = self.maxWaitTime,
+                                        siteWhitelist = self.siteWhitelist,
+                                        siteBlacklist = self.siteBlacklist,
+                                        initial_lfn_counter = lfn_counter)
 
         if getattr(parentOutputModule, "dataTier") == "DQMROOT":
-            mergeTaskCmsswHelper.setDataProcessingConfig("do_not_use", "merge", newDQMIO = True)
+            mergeTaskCmsswHelper.setDataProcessingConfig("do_not_use", "merge",
+                                                         newDQMIO = True)
         else:
             mergeTaskCmsswHelper.setDataProcessingConfig("do_not_use", "merge")
 
@@ -575,6 +596,11 @@ class StdBase(object):
                              forceMerged = True)
 
         self.addCleanupTask(parentTask, parentOutputModuleName)
+        if self.enableHarvesting and getattr(parentOutputModule, "dataTier") in ["DQMROOT", "DQM"]:
+            self.addDQMHarvestTask(mergeTask, "Merged",
+                                   uploadProxy = self.dqmUploadProxy,
+                                   periodic_harvest_interval= self.periodicHarvestingInterval,
+                                   doLogCollect = doLogCollect)
         return mergeTask
 
     def addCleanupTask(self, parentTask, parentOutputModuleName):
@@ -619,7 +645,7 @@ class StdBase(object):
         if doLogCollect:
             self.addLogCollectTask(harvestTask, taskName = "%s%sDQMHarvestLogCollect" % (parentTask.name(), parentOutputModuleName))
 
-        harvestTask.setTaskType("Processing")
+        harvestTask.setTaskType("Harvesting")
         harvestTask.applyTemplates()
         harvestTask.setTaskPriority(self.priority + 5)
 
@@ -648,6 +674,7 @@ class StdBase(object):
                                                                                         getattr(parentOutputModule, "processedDataset"),
                                                                                         getattr(parentOutputModule, "dataTier")),
                                                            runNumber = self.runNumber,
+                                                           dqmSeq = self.dqmSequences,
                                                            newDQMIO = True)
         else:
             harvestTaskCmsswHelper.setDataProcessingConfig(self.procScenario, "dqmHarvesting",
@@ -655,11 +682,12 @@ class StdBase(object):
                                                            datasetName = "/%s/%s/%s" % (getattr(parentOutputModule, "primaryDataset"),
                                                                                         getattr(parentOutputModule, "processedDataset"),
                                                                                         getattr(parentOutputModule, "dataTier")),
-                                                           runNumber = self.runNumber)
-        if uploadProxy: 
-            harvestTaskUploadHelper = harvestTaskUpload.getTypeHelper()
-            harvestTaskUploadHelper.setProxyFile(uploadProxy)
+                                                           runNumber = self.runNumber,
+                                                           dqmSeq = self.dqmSequences)
 
+        harvestTaskUploadHelper = harvestTaskUpload.getTypeHelper()
+        harvestTaskUploadHelper.setProxyFile(uploadProxy)
+        harvestTaskUploadHelper.setServerURL(self.dqmUploadUrl)
         return
 
     def setupPileup(self, task, pileupConfig):
@@ -698,8 +726,23 @@ class StdBase(object):
         put it.
 
         If something breaks, raise a WMSpecFactoryException.  A message
-        in that excpetion will be transferred to an HTTP Error later on.
+        in that exception will be transferred to an HTTP Error later on.
         """
+
+        #Check the workload for harvesting task, if there is a
+        #harvesting task then a self.procScenario must be defined
+        #Only if the harvesting is enable for this request
+        if self.enableHarvesting:
+            for task in workload.getAllTasks():
+                if task.taskType() == "Harvesting":
+                    for stepName in task.listAllStepNames():
+                        step = task.getStep(stepName)
+                        if step.stepType() != "CMSSW":
+                            continue
+                        cmsswHelper = task.getTypeHelper(stepName)
+                        if not cmsswHelper.getScenario():
+                            self.raiseValidationException(msg = "A DQM harvesting task was found, you must specify a scenario")
+
         return
 
     def factoryWorkloadConstruction(self, workloadName, arguments):
@@ -767,7 +810,7 @@ class StdBase(object):
 
         for field in fields:
             if not field in schema.keys():
-                msg = "Missing required field %s in workload validation!" % field
+                msg = "Missing required field '%s' in workload validation!" % field
                 self.raiseValidationException(msg = msg)
             if schema[field] == None:
                 msg = "NULL value for required field %s!" % field
@@ -776,7 +819,7 @@ class StdBase(object):
                 try:
                     identifier(candidate = schema[field])
                 except AssertionError, ex:
-                    msg = "Schema value for field %s failed Lexicon validation" % field
+                    msg = "Schema value for field '%s' failed Lexicon validation" % field
                     self.raiseValidationException(msg = msg)
         return
 
@@ -801,10 +844,8 @@ class StdBase(object):
 
         if configID == '' or configID == ' ':
             self.raiseValidationException(msg = "ConfigCacheID is invalid and cannot be loaded")
-
-        from WMCore.Cache.WMConfigCache import ConfigCache
-        configCache = ConfigCache(dbURL = couchURL,
-                                  couchDBName = couchDBName,
+            
+        configCache = ConfigCache(dbURL = couchURL, couchDBName = couchDBName,
                                   id = configID)
         try:
             configCache.loadByID(configID = configID)

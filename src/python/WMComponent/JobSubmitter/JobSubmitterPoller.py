@@ -117,7 +117,7 @@ class JobSubmitterPoller(BaseWorkerThread):
                 logging.debug("Config: %s" % config)
             except:
                 pass
-            raise JobSubmitterException(msg)
+            raise JobSubmitterPollerException(msg)
 
 
         # Now the DAOs
@@ -138,7 +138,7 @@ class JobSubmitterPoller(BaseWorkerThread):
     def getPackageCollection(self, sandboxDir):
         """
         _getPackageCollection_
-        
+
         Given a jobID figure out which packageCollection
         it should belong in.
         """
@@ -323,6 +323,7 @@ class JobSubmitterPoller(BaseWorkerThread):
                 possibleLocations = non_draining_sites
 
             if len(possibleLocations) == 0:
+                newJob['name'] = loadedJob['name']
                 badJobs.append(newJob)
                 continue
 
@@ -357,8 +358,10 @@ class JobSubmitterPoller(BaseWorkerThread):
                        frozenset(possibleLocations),
                        loadedJob.get("scramArch", None),
                        loadedJob.get("swVersion", None),
-                       loadedJob["name"])
-            
+                       loadedJob["name"],
+                       loadedJob.get("proxyPath", None),
+                       newJob['request_name'])
+
             self.jobDataCache[workflowName][jobID] = jobInfo
 
         if len(badJobs) > 0:
@@ -419,8 +422,8 @@ class JobSubmitterPoller(BaseWorkerThread):
                 self.cmsNames[cmsName] = []
             if not siteName in self.cmsNames[cmsName]:
                 self.cmsNames[cmsName].append(siteName)
-            if state != "Normal" and cmsName not in self.drainSites:
-                self.drainSites.append(cmsName)
+            if state != "Normal" and siteName not in self.drainSites:
+                self.drainSites.append(siteName)
 
             for seName in rcThresholds[siteName]["se_names"]:
                 if not seName in self.siteKeys.keys():
@@ -604,7 +607,9 @@ class JobSubmitterPoller(BaseWorkerThread):
                                'possibleSites': cachedJob[9],
                                'scramArch': cachedJob[10],
                                'swVersion': cachedJob[11],
-                               'name': cachedJob[12]}
+                               'name': cachedJob[12],
+                               'proxyPath': cachedJob[13],
+                               'requestName': cachedJob[14]}
 
                     # Add to jobsToSubmit
                     jobsToSubmit[package].append(jobDict)
@@ -635,8 +640,6 @@ class JobSubmitterPoller(BaseWorkerThread):
         Actually do the submission of the jobs
         """
 
-        agentName = self.config.Agent.agentName
-        lenWork   = 0
         jobList   = []
         idList    = []
 

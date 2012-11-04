@@ -78,7 +78,8 @@ class StageOut(Executor):
 
         # switch between old stageOut behavior and new, fancy stage out behavior
         useNewStageOutCode = False
-        if overrides.has_key('newStageOut') and overrides.get('newStageOut'):
+        if self.step.getNewStageoutOverride() or \
+            (overrides.has_key('newStageOut') and overrides.get('newStageOut')):
             useNewStageOutCode = True
 
 
@@ -125,8 +126,8 @@ class StageOut(Executor):
                               % (step, stepLocation))
                 continue
             # First, get everything from a file and 'unpersist' it
-            stepReport = Report(step)
-            stepReport.unpersist(reportLocation)
+            stepReport = Report()
+            stepReport.unpersist(reportLocation, step)
             taskID = getattr(stepReport.data, 'id', None)
 
             # Don't stage out files from bad steps.
@@ -346,6 +347,3 @@ class StageOut(Executor):
 
         # Return the file
         return mergefile
-
-
-

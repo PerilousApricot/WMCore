@@ -30,22 +30,22 @@ class FileManager:
 
     Object that handles modifying files in a site-specific way.
     Supercedes StageInMgr, StageOutMgr, DeleteMgr
-    
+
     new easy to use interface:
     deleteLFN(lfn) - tries to delete a certain LFN, returning details on success. Raising on failure
     stageIn/stageOut - accepts a dict containing the details
                         PFN stores the local file name
                         LFN stores the lfn of the file, which will be mapped to a PFN
-                      
+
     plugin implementations require:
     newPfn =  pluginImplementation.doTransfer( lfn, pfn, stageOut, seName, command, options, protocol  )
     pluginImplementation.doDelete(pfn, seName, command, options, protocol  )
-    
+
     Which make one attempt to perform the action and raises if it doesn't succeed. It is the plugins
     responsibility to verify that things are complete.
     """
-    def __init__(self, numberOfRetries = 30, retryPauseTime=60, **overrideParams):
-        
+    def __init__(self, numberOfRetries = 3, retryPauseTime=15, **overrideParams):
+
         # set defaults
         self.failed = {}
         self.completedFiles = {}
@@ -57,7 +57,7 @@ class FileManager:
         self.tfc = None
         self.numberOfRetries = numberOfRetries
         self.retryPauseTime = retryPauseTime
-                                
+
         if overrideParams != {}:
             log.critical("Override: %s" % overrideParams)
             self.override = True
@@ -65,13 +65,13 @@ class FileManager:
         else:
             self.siteCfg = loadSiteLocalConfig()
             self.initialiseSiteConf()
-            
+
     def stageFile(self, fileToStage, stageOut = True):
         """
         _stageFile_
 
         Use call to invoke transfers (either in or out)
-        input: 
+        input:
             fileToStage: a dict containing at least:
                         LFN: the LFN for one end of the transfer, will be
                             mapped to a PFN before the transfer
@@ -80,7 +80,7 @@ class FileManager:
             stageOut: boolean for if the file is staged in or out
         output:
             dict from fileToStage with PFN, SEName, StageOutCommand added
-            
+
         I'm not entirely sure that StageOutCommand makes sense, but I don't want to break old code
         -AMM 6/30/2010
 
@@ -89,20 +89,26 @@ class FileManager:
         log.info("Working on file: %s" % fileToStage['LFN'])
         lfn =           fileToStage['LFN']
         localFileName = fileToStage['PFN']
-
+        self.firstException = None
 
         log.info("Beginning %s" % ('StageOut' if stageOut else 'StageIn'))
-        
+
         # generate list of stageout methods we will try
         stageOutMethods = [ self.defaultMethod ]
         stageOutMethods.extend( self.fallbacks )
-        
+
         # loop over all the different methods. This unifies regular and fallback stuff. Nice.
-        methodCounter = 1
+        methodCounter = 0
         for currentMethod in stageOutMethods:
+            methodCounter += 1
             # the PFN that is received here is mapped from the LFN
+            log.info("Getting transfer details for %s LFN %s" % (currentMethod, lfn))
             (seName, command, options, pfn, protocol) =\
                 self.getTransferDetails(lfn, currentMethod)
+            log.info("Using SE:      %s" % seName)
+            log.info("Command:       %s" % command)
+            log.info("Options:       %s" % options)
+            log.info("Protocol:      %s" % protocol)
             log.info("Mapped LFN:    %s" % lfn)
             log.info("    to PFN:    %s" % pfn)
             log.info("LocalFileName: %s" % localFileName)
@@ -116,11 +122,14 @@ class FileManager:
                 return fileToStage
             else:
                 # transfer method didn't work, go to next one
-                break
+                continue
         # if we're here, then nothing worked. transferfail.
         log.error("Error in stageout")
-        raise StageOutError, "Error in stageout, this has been logged in the logs"
-    
+        if self.firstException:
+            raise self.firstException
+        else:
+            raise StageOutError, "Error in stageout, this has been logged in the logs"
+
     def deleteLFN(self, lfn):
         """
         attempts to delete a file. will raise if none of the methods work, returns details otherwise
@@ -130,30 +139,40 @@ class FileManager:
         # generate list of stageout methods we will try
         stageOutMethods = [ self.defaultMethod ]
         stageOutMethods.extend( self.fallbacks )
-        
+
         # loop over all the different methods. This unifies regular and fallback stuff. Nice.
-        methodCounter = 1
+        methodCounter = 0
         for currentMethod in stageOutMethods:
-    
+            methodCounter += 1
             (seName, command, options, pfn, protocol) =\
                 self.getTransferDetails(lfn, currentMethod)
-            
+
             retval = { 'LFN' : lfn,
                       'PFN': pfn,
-                      'SEName': seName}        
-            
+                      'SEName': seName}
+
             log.info("Attempting deletion method %s" % (methodCounter, ))
             log.info("Current method information: %s" % currentMethod)
-            
-            deleteSlave =  retrieveStageOutImpl(command, useNewVersion=True)
-            
-            # do the copy. The implementation is responsible for its own verification
+
+            try:
+                deleteSlave =  retrieveStageOutImpl(command, useNewVersion=True)
+            except RegistryError:
+                deleteSlave =  retrieveStageOutImpl(command, useNewVersion=False)
+                logging.error("Tried to load stageout backend %s, a new version isn't there yet" % command)
+                logging.error("Will try to fall back to the oldone, but it's really best to redo it")
+                logging.error("Here goes...")
+                deleteSlave.removeFile( pfn )
+                return retval
+
+            # do the delete. The implementation is responsible for its own verification
             try:
                 deleteSlave.doDelete( pfn, seName, command, options, protocol  )
             except StageOutError, ex:
                 log.info("Delete failed in an expected manner. Exception is:")
                 log.info("%s" % str(ex))
                 log.info(traceback.format_exc())
+                if not self.firstException:
+                    self.firstException = ex
                 continue
             # note to people who think it's cheeky to catch exception after ranting against it:
             # this makes sense because no matter what the exception, we want to keep going
@@ -163,13 +182,19 @@ class FileManager:
                 log.critical("Delete failed in an unexpected manner. Exception is:")
                 log.critical("%s" % str(ex))
                 log.info(traceback.format_exc())
+                if not self.firstException:
+                    self.firstException = ex
                 continue
-            
+
             # successful deletions make it here
             return retval
-        
+
         # unseuccessful transfers make it here
-        raise StageOutFailure("Could not delete", **retval)
+        if self.firstException:
+            raise self.firstException
+        else:
+            raise StageOutFailure("Could not delete", **retval)
+
     def initialiseSiteConf(self):
         """
         _initialiseSiteConf_
@@ -183,7 +208,7 @@ class FileManager:
             seName   = self.siteCfg.localStageOut.get("se-name")
             catalog  = self.siteCfg.localStageOut.get("catalog")
             option   = self.siteCfg.localStageOut.get('option', None)
-              
+
         except:
             log.critical( 'Either command, se-name or the catalog are missing from site-local-config.xml' )
             log.critical( 'File operations cannot proceed like this' )
@@ -201,7 +226,7 @@ class FileManager:
                               'catalog' : catalog }
         if option:
             self.defaultMethod['option'] = option
-        
+
         log.info("Local Stage Out Implementation to be used is: %s" % implName)
         log.info("Local Stage Out SE Name to be used is %s" % seName)
         log.info("Local Stage Out Catalog to be used is %s" % catalog)
@@ -213,12 +238,12 @@ class FileManager:
     def initialiseOverride(self):
         """
         _initialiseOverride_
-    
+
         Extract required information from override.
-        
+
         TODO: this should be merged with the initializeSiteConf function
         but I can't think of a nice way to do it
-    
+
         """
         implName = seName = lfn_prefix = None
         option = ""
@@ -226,38 +251,38 @@ class FileManager:
             implName   = self.overrideConf["command"]
             seName     = self.overrideConf["se-name"]
             lfn_prefix = self.overrideConf["lfn-prefix"]
-              
+
         except:
             log.critical( 'Either command, se-name or the lfn-prefix are missing from the override' )
             log.critical( 'File operations cannot proceed like this' )
             log.critical( 'command: %s se-name: %s lfn-prefix: %s' % (implName, seName, lfn_prefix) )
             raise
-    
+
         self.fallbacks = []
         self.defaultMethod = { 'command' : implName,
                               'se-name' : seName,
                               'lfn-prefix' : lfn_prefix }
         if option:
             self.defaultMethod['option'] = option
-        
+
         log.info("Note: We have been directed to use a StageOut override")
         log.info("Local Stage Out Implementation to be used is: %s" % implName)
         log.info("Local Stage Out SE Name to be used is %s" % seName)
         log.info("Local Stage Out lfn-prefix to be used is %s" % lfn_prefix)
 
 
-    
+
     def getTransferDetails(self, lfn, currentMethod):
         """
         helper procedure to return the proper parameters to interact with the filesystem
         regardless of whether or not there's an override involved
         """
-        
+
         if currentMethod.has_key( 'lfn-prefix' ):
-            seName   = self.overrideConf['se-name']
-            command  = self.overrideConf['command']
-            options  = self.overrideConf['option']
-            pfn      = "%s%s" % (self.overrideConf['lfn-prefix'], lfn)
+            seName   = currentMethod['se-name']
+            command  = currentMethod['command']
+            options  = currentMethod.get('option', None)
+            pfn      = "%s%s" % (currentMethod['lfn-prefix'], lfn)
             protocol = command
         else:
             seName   = self.siteCfg.localStageOut['se-name']
@@ -266,51 +291,55 @@ class FileManager:
             pfn      = self.searchTFC(lfn)
             protocol = self.tfc.preferredProtocol
         return (seName, command, options, pfn, protocol)
-    
+
     def stageIn(self,fileToStage):
-        self.stageFile(fileToStage, stageOut=False)
-    
+        return self.stageFile(fileToStage, stageOut=False)
+
     def stageOut(self,fileToStage):
-        self.stageFile(fileToStage, stageOut=True)
-  
+        return self.stageFile(fileToStage, stageOut=True)
+
     def _doTransfer(self, currentMethod, methodCounter, localFileName, pfn, stageOut):
         """
         performs a transfer using a selected method and retries.
         necessary because python doesn't have a good nested loop break syntax
         """
-        
+
         (seName, command, options, _, protocol) =\
             self.getTransferDetails(localFileName, currentMethod)
-        
+
         # Swap directions if we're staging in
         if not stageOut:
             tempPfn       = pfn
             pfn           = localFileName
             localFileName = tempPfn
-                    
+
         for retryNumber in range(self.numberOfRetries + 1):
             log.info("Attempting transfer method %s, Retry number: %s" % (methodCounter, retryNumber))
             log.info("Current method information: %s" % currentMethod)
-            
+
             try:
-                stageOutSlave =  retrieveStageOutImpl(command, useNewVersion=True)
+                stageOutSlave =  retrieveStageOutImpl(command, useNewVersion=True, stagein = not stageOut)
             except RegistryError:
-                stageOutSlave =  retrieveStageOutImpl(command, useNewVersion=False)
+                stageOutSlave =  retrieveStageOutImpl(command, useNewVersion=False, stagein = not stageOut)
                 logging.error("Tried to load stageout backend %s, a new version isn't there yet" % command)
                 logging.error("Will try to fall back to the oldone, but it's really best to redo it")
                 logging.error("Here goes...")
-                return stageOutSlave( protocol, localFileName, pfn, options )
-            
+                stageOutSlave( protocol, localFileName, pfn, options )
+                return pfn
+
             # do the copy. The implementation is responsible for its own verification
             newPfn = None
             try:
-                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol  )
+                # FIXME add checksum stuff
+                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol, None  )
             except StageOutError, ex:
                 log.info("Transfer failed in an expected manner. Exception is:")
                 log.info("%s" % str(ex))
                 log.info("Sleeping for %s seconds" % self.retryPauseTime)
                 log.info(traceback.format_exc())
                 time.sleep( self.retryPauseTime )
+                if not self.firstException:
+                    self.firstException = ex
                 continue
             # note to people who think it's cheeky to catch exception after ranting against it:
             # this makes sense because no matter what the exception, we want to keep going
@@ -322,13 +351,15 @@ class FileManager:
                 log.critical("Since this is an unexpected error, we are continuing to the next method")
                 log.critical("and not retrying the same one")
                 log.critical(traceback.format_exc())
+                if not self.firstException:
+                    self.firstException = ex
                 break
-            
+
             # successful transfers make it here
             return newPfn
         # unseuccessful transfers make it here
         return False
-    
+
 
 
     def cleanSuccessfulStageOuts(self):
@@ -392,7 +423,7 @@ class StageInMgr(FileManager):
         the dict will be modified and returned, or an exception will be raised
         """
         return self.stageIn(fileToStage)
-    
+
 class StageOutMgr(FileManager):
     def __init__(self, numberOfRetries = 30, retryPauseTime=60, **overrideParams):
         FileManager.__init__(self, numberOfRetries = numberOfRetries, retryPauseTime=retryPauseTime, **overrideParams)
@@ -415,7 +446,3 @@ class DeleteMgr(FileManager):
         if not 'LFN' in fileToDelete:
             raise StageOutFailure, 'LFN not provided to deleteLFN'
         return self.deleteLFN(fileToDelete['LFN'])
-
-
-
-

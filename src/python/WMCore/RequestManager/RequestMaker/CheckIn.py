@@ -29,7 +29,7 @@ def _raiseCheckInError(request, ex, msg):
     Private function called only from this module.
     Always from the except exception block - the traceback
     is put in the local log file.
-    
+
     """
     requestName = request['RequestName']
     msg +='\n' + str(ex)
@@ -39,12 +39,12 @@ def _raiseCheckInError(request, ex, msg):
     # make absolutely sure you're deleting the right one
     oldReqId = request['RequestID']
     if reqId:
-       # make absolutely sure you're deleting the right one
-       oldReqId = request['RequestID']
-       if oldReqId != reqId:
-           raise RequestCheckInError("Bad state deleting request %s/%s.  Please contact a ReqMgr administrator" % (oldReqId/ reqId))
-       else:
-           RequestAdmin.deleteRequest(reqId)
+        # make absolutely sure you're deleting the right one
+        oldReqId = request['RequestID']
+        if oldReqId != reqId:
+            raise RequestCheckInError("Bad state deleting request %s/%s.  Please contact a ReqMgr administrator" % (oldReqId/ reqId))
+        else:
+            RequestAdmin.deleteRequest(reqId)
     # get information about the last exception
     trace = traceback.format_exception(*sys.exc_info())
     traceString = ''.join(trace)
@@ -52,7 +52,7 @@ def _raiseCheckInError(request, ex, msg):
     raise RequestCheckInError(msg)
 
 
-def checkIn(request, requestType = 'None', wmstatSvc = None):
+def checkIn(request, requestType = 'None'):
     """
     _CheckIn_
 
@@ -65,7 +65,7 @@ def checkIn(request, requestType = 'None', wmstatSvc = None):
     # // First try and register the request in the DB
     #//
     requestName = request['RequestName']
-    
+
     # test if the software versions are registered first
     versions  = SoftwareManagement.listSoftware()
     scramArch = request.get('ScramArch')
@@ -79,7 +79,9 @@ def checkIn(request, requestType = 'None', wmstatSvc = None):
             raise RequestCheckInError(m)
         for version in request.get('SoftwareVersions', []):
             if not version in versions[scramArch]:
-                raise RequestCheckInError("Cannot find software version %s in ReqMgr for scramArch %s" % (version, scramArch))
+                raise RequestCheckInError("Cannot find software version %s in ReqMgr for "
+                                          "scramArch %s. Supported versions: %s" %
+                                          (version, scramArch, versions[scramArch]))
 
     try:
         reqId = MakeRequest.createRequest(
@@ -136,8 +138,6 @@ def checkIn(request, requestType = 'None', wmstatSvc = None):
     campaign = request.get("Campaign", "")
     if campaign != "" and campaign != None:
         Campaign.associateCampaign(campaign, reqId)
-    
-    if wmstatSvc != None:
-        wmstatSvc.insertRequest(request)
-    return
-
+        
+    logging.info("Request '%s' built with request id '%s"'' % (requestName,
+                request['RequestID']))

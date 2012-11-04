@@ -6,6 +6,7 @@ from glob import glob
 from os.path import splitext, basename, join as pjoin, walk
 from ConfigParser import ConfigParser, NoOptionError
 import os, sys, os.path
+import atexit, signal
 import unittest
 import time
 import pickle
@@ -95,12 +96,13 @@ if can_nose:
         will replace os._exit() and throw an exception instead
         """
         if hasattr( threading.local(), "isMain" ) and threading.local().isMain:
-            # only trap the main thread
-            print "*******EXIT WAS TRAPPED**********"
-            raise RuntimeError, "os._exit() was called, we trapped it for testing"
-        else:
-            # subthreads can behave the same
-            os.DMWM_REAL_EXIT( code )
+            # The main thread should raise an exception
+            sys.stderr.write("*******EXIT WAS TRAPPED**********\n")
+            raise RuntimeError, "os._exit() was called in the main thread"
+        else:        
+            # os._exit on child threads should just blow away the thread
+            raise SystemExit, "os._exit() was called in a child thread. " +\
+                              "Protecting the interpreter and trapping it"
 
     class DetailedOutputter(Plugin):
         name = "detailed"
@@ -156,10 +158,10 @@ if can_nose:
                          ('testingRoot=',
                          None,
                          "Primarily used by buildbot. Gives the path to the root of the test tree (i.e. the directory with WMCore_t)"),
-                        ('testMinimumIndex=',
+                         ('testMinimumIndex=',
                          None,
                          "The minimum ID to be executed (advanced use)"),
-                        ('testMaximumIndex=',
+                         ('testMaximumIndex=',
                          None,
                          "The maximum ID to be executed (advanced use)")
                          ]
@@ -199,6 +201,9 @@ if can_nose:
             idhandle = open( ".noseids", "r" )
             testIds = pickle.load(idhandle)['ids']
             idhandle.close()
+            
+            if os.path.exists("nosetests.xml"):
+                os.unlink("nosetests.xml")
 
             print "path lists is %s" % pathList
             # divide it up
@@ -208,7 +213,7 @@ if can_nose:
                 if int(id) >= int(self.testMinimumIndex) and int(id) <= int(self.testMaximumIndex):
                     # generate a stable ID for sorting
                     if len(testIds[id]) == 3:
-                        testName = testIds[id][1] + testIds[id][2]
+                        testName = "%s%s" % (testIds[id][1], testIds[id][2])
                         testHash = hashlib.md5( testName ).hexdigest()
                         hashSnip = testHash[:7]
                         hashInt  = int( hashSnip, 16 )
@@ -274,21 +279,58 @@ if can_nose:
                 sys.stdout.flush()
                 if not quickTestArg:
                     retval = self.callNose([__file__,'--with-xunit', '-m', '(_t.py$)|(_t$)|(^test)','-a',
-                                             '!workerNodeTest,!integration,!performance,!__integration__,!__performance__',
+                                             '!workerNodeTest,!integration,!performance,!lifecycle,!__integration__,!__performance__,!__lifecycle__',
                                              '--with-coverage','--cover-html','--cover-html-dir=coverageHtml','--cover-erase',
                                              '--cover-package=' + moduleList, '--cover-inclusive',
                                              self.testingRoot],
                                              paths = testPath)
                 else:
                     retval = self.callNose([__file__,'--with-xunit', '-m', '(_t.py$)|(_t$)|(^test)','-a',
-                         '!workerNodeTest,!integration,!performance,!__integration__,!__performance__',
+                         '!workerNodeTest,!integration,!performance,!lifecycle,!__integration__,!__performance__,!__lifecycle__',
                          '--stop', self.testingRoot],
                          paths = testPath)
+                    
+            threadCount = len(threading.enumerate())
+            # Set the signal handler and a 20-second alarm
+            def signal_handler( foo, bar ):
+                sys.stderr.write("Timeout reached trying to shut down. Force killing...\n")
+                sys.stderr.flush()
+                if retval:
+                    os.DMWM_REAL_EXIT( 0 )
+                else:
+                    os.DMWM_REAL_EXIT( 1 )
+            signal.signal(signal.SIGALRM, signal_handler )
+            signal.alarm(20)
+            marker = open("nose-marker.txt", "w")
+            marker.write("Ready to be slayed\n")
+            marker.flush()
+            marker.close()
 
+            if threadCount > 1:
+                import cherrypy
+                sys.stderr.write("There are %s threads running. Cherrypy may be acting up.\n" % len(threading.enumerate()))
+                sys.stderr.write("The threads are: \n%s\n" % threading.enumerate())
+                atexit.register(cherrypy.engine.stop)
+                cherrypy.engine.exit()
+                sys.stderr.write("Asked cherrypy politely to commit suicide\n")
+                sys.stderr.write("Now there are %s threads running\n" % len(threading.enumerate()))
+                sys.stderr.write("The threads are: \n%s\n" % threading.enumerate())
+                
+            threadCount = len(threading.enumerate())
+            print "Testing complete, there are now %s threads" % len(threading.enumerate())
+                                    
+            # try to exit
             if retval:
                 sys.exit( 0 )
             else:
                 sys.exit( 1 )
+                
+            # if we got here, then sys.exit got cancelled by the alarm...
+            sys.stderr.write("Failed to exit after 30 secs...something hung\n")
+            sys.stderr.write("Forcing process to die")
+            os.DMWM_REAL_EXIT()
+
+            
 else:
     class TestCommand(Command):
         user_options = [ ]

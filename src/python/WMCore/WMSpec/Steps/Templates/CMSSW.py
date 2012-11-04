@@ -122,8 +122,8 @@ class CMSSWStepHelper(CoreHelper):
         # which is only supported in new agents that only look
         # at pickledarguments anyways
         try:
-            self.data.application.configuration.section_('arguments') 
-            [ setattr(self.data.application.configuration.arguments, k, v) 
+            self.data.application.configuration.section_('arguments')
+            [ setattr(self.data.application.configuration.arguments, k, v)
               for k, v in args.items() ]
         except Exception:
             pass
@@ -174,8 +174,8 @@ class CMSSWStepHelper(CoreHelper):
 
         Set the global tag.
         """
-        self.data.application.configuration.section_('arguments') 
-        self.data.application.configuration.arguments.globalTag = globalTag 
+        self.data.application.configuration.section_('arguments')
+        self.data.application.configuration.arguments.globalTag = globalTag
 
         args = {}
         if hasattr(self.data.application.configuration, "pickledarguments"):
@@ -196,6 +196,46 @@ class CMSSWStepHelper(CoreHelper):
                 return self.data.application.configuration.arguments.globalTag
 
         return pickle.loads(self.data.application.configuration.pickledarguments)['globalTag']
+
+    def setDatasetName(self, datasetName):
+        """
+        _setDatasetName_
+
+        Set the dataset name in the pickled arguments
+        """
+        self.data.application.configuration.section_('arguments')
+        self.data.application.configuration.arguments.datasetName = datasetName
+
+        args = {}
+        if hasattr(self.data.application.configuration, "pickledarguments"):
+            args = pickle.loads(self.data.application.configuration.pickledarguments)
+        args['datasetName'] = datasetName
+        self.data.application.configuration.pickledarguments = pickle.dumps(args)
+
+        return
+
+    def getDatasetName(self):
+        """
+        _getDatasetName_
+
+        Retrieve the dataset name from the pickled arguments
+        """
+        if hasattr(self.data.application.configuration, "arguments"):
+            if hasattr(self.data.application.configuration.arguments, "datasetName"):
+                return self.data.application.configuration.arguments.datasetName
+
+        return pickle.loads(self.data.application.configuration.pickledarguments).get('datasetName', None)
+
+    def getScenario(self):
+        """
+        _getScenario_
+
+        Retrieve the scenario from the pickled arguments, if any
+        """
+        if hasattr(self.data.application.configuration, "scenario"):
+            return self.data.application.configuration.scenario
+
+        return None
 
     def setUserSandbox(self, userSandbox):
         """
@@ -299,8 +339,8 @@ class CMSSWStepHelper(CoreHelper):
         """
         _setMulticoreCores_
 
-        Preset the number of cores for CMSSW to run on, expect this to dribble away 
-        as batch systems get better at dynamic discovery etc, or be used as an override for 
+        Preset the number of cores for CMSSW to run on, expect this to dribble away
+        as batch systems get better at dynamic discovery etc, or be used as an override for
         testing
         """
         self.data.application.multicore.numberOfCores = ncores
@@ -317,10 +357,10 @@ class CMSSWStepHelper(CoreHelper):
     def multicoreEnabled(self):
         """
         _multicoreEnabled_
-        
+
         True/False flag to determine wether multicore is enabled
         """
-        return self.data.application.multicore.enabled 
+        return self.data.application.multicore.enabled
 
 
 class CMSSW(Template):
@@ -352,6 +392,7 @@ class CMSSW(Template):
         step.application.section_("command")
         step.application.command.executable = "cmsRun"
         step.application.command.configuration = "PSet.py"
+        step.application.command.configurationPickle = "PSet.pkl"
         step.application.command.configurationHash = None
         step.application.command.psetTweak = None
         step.application.command.arguments = ""
@@ -402,4 +443,3 @@ class CMSSW(Template):
 
         """
         return CMSSWStepHelper(step)
-

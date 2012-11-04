@@ -117,12 +117,6 @@ class BossAirTest(unittest.TestCase):
                                      dbinterface = myThread.dbi)
         self.getJobs = self.daoFactory(classname = "Jobs.GetAllJobs")
 
-
-        locationAction = self.daoFactory(classname = "Locations.New")
-        locationSlots  = self.daoFactory(classname = "Locations.SetJobSlots")
-
-
-
         #Create sites in resourceControl
         resourceControl = ResourceControl()
         for site in self.sites:
@@ -203,6 +197,7 @@ class BossAirTest(unittest.TestCase):
         config.section_("BossAir")
         config.BossAir.pluginNames = ['TestPlugin', 'CondorPlugin']
         config.BossAir.pluginDir   = 'WMCore.BossAir.Plugins'
+        config.BossAir.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 
         config.component_("JobSubmitter")
         config.JobSubmitter.logLevel      = 'INFO'
@@ -621,7 +616,3 @@ class BossAirTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-
-
-

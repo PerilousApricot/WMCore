@@ -7,7 +7,6 @@ Unit tests for the new Tier1 PromptReconstruction workflow.
 
 import unittest
 import os
-import threading
 
 from WMCore.WMBS.Fileset import Fileset
 from WMCore.WMBS.Subscription import Subscription
@@ -65,9 +64,9 @@ class PromptRecoTest(unittest.TestCase):
 
     def testPromptReco(self):
         """
-        _testT1PromptReco_
+        _testPromptReco_
 
-        Create a T1 Prompt Reconstruction workflow
+        Create a Prompt Reconstruction workflow
         and verify it installs into WMBS correctly.
         """
         testArguments = getTestArguments()
@@ -138,6 +137,20 @@ class PromptRecoTest(unittest.TestCase):
                          "Error: LogArchive output fileset is wrong.")
         self.assertEqual(unmergedLogArchOutput.name, "/TestWorkload/Reco/AlcaSkim/unmerged-logArchive",
                          "Error: LogArchive output fileset is wrong.")
+
+        dqmWorkflow = Workflow(name = "TestWorkload",
+                               task = "/TestWorkload/Reco/RecoMergewrite_DQM/RecoMergewrite_DQMDQMHarvestMerged")
+        dqmWorkflow.load()
+
+        logArchOutput = dqmWorkflow.outputMap["logArchive"][0]["merged_output_fileset"]
+        unmergedLogArchOutput = dqmWorkflow.outputMap["logArchive"][0]["output_fileset"]
+        logArchOutput.loadData()
+        unmergedLogArchOutput.loadData()
+
+        self.assertEqual(logArchOutput.name, "/TestWorkload/Reco/RecoMergewrite_DQM/RecoMergewrite_DQMDQMHarvestMerged/unmerged-logArchive",
+                         "Error: LogArchive output fileset is wrong.")
+        self.assertEqual(unmergedLogArchOutput.name, "/TestWorkload/Reco/RecoMergewrite_DQM/RecoMergewrite_DQMDQMHarvestMerged/unmerged-logArchive",
+                     "Error: LogArchive output fileset is wrong.")
 
         goldenOutputMods = ["write_RECO", "write_AOD", "write_DQM"]
         for goldenOutputMod in goldenOutputMods:
@@ -224,8 +237,16 @@ class PromptRecoTest(unittest.TestCase):
         self.assertEqual(alcaSkimSubscription["split_algo"], "WMBSMergeBySize",
                          "Error: Wrong split algorithm. %s" % alcaSkimSubscription["split_algo"])
 
-        mergedRecoFileset = Fileset(name = "/TestWorkload/Reco/RecoMergewrite_RECO/merged-Merged")
-        mergedRecoFileset.loadData()
+        mergedDQMFileset = Fileset(name = "/TestWorkload/Reco/RecoMergewrite_DQM/merged-Merged")
+        mergedDQMFileset.loadData()
+
+        dqmSubscription = Subscription(fileset = mergedDQMFileset, workflow = dqmWorkflow)
+        dqmSubscription.loadData()
+
+        self.assertEqual(dqmSubscription["type"], "Harvesting",
+                         "Error: Wrong subscription type.")
+        self.assertEqual(dqmSubscription["split_algo"], "Harvest",
+                         "Error: Wrong split algo.")
 
         unmergedOutputs = ["write_RECO", "write_AOD", "write_DQM"]
         for unmergedOutput in unmergedOutputs:
@@ -348,6 +369,20 @@ class PromptRecoTest(unittest.TestCase):
             self.assertEqual(logCollectSub["split_algo"], "MinFileBased",
                          "Error: Wrong split algorithm.")
 
+        dqmHarvestLogCollect = Fileset(name = "/TestWorkload/Reco/RecoMergewrite_DQM/RecoMergewrite_DQMDQMHarvestMerged/unmerged-logArchive")
+        dqmHarvestLogCollect.loadData()
+        dqmHarvestLogCollectWorkflow = Workflow(name = "TestWorkload",
+                                               task = "/TestWorkload/Reco/RecoMergewrite_DQM/RecoMergewrite_DQMDQMHarvestMerged/RecoMergewrite_DQMMergedDQMHarvestLogCollect")
+        dqmHarvestLogCollectWorkflow.load()
+
+        logCollectSub = Subscription(fileset = dqmHarvestLogCollect, workflow = dqmHarvestLogCollectWorkflow)
+        logCollectSub.loadData()
+
+        self.assertEqual(logCollectSub["type"], "LogCollect",
+                         "Error: Wrong subscription type.")
+        self.assertEqual(logCollectSub["split_algo"], "MinFileBased",
+                         "Error: Wrong split algo.")
+
         return
 
     @attr("integration")
@@ -361,7 +396,10 @@ class PromptRecoTest(unittest.TestCase):
         self.setupPromptSkimConfigObject()
         testArguments = getTestArguments()
         testArguments["PromptSkims"] = [self.promptSkim]
-
+        testArguments["CouchURL"] = os.environ["COUCHURL"]
+        testArguments["CouchDBName"] = "promptreco_t"
+        testArguments["EnvPath"] = os.environ.get("EnvPath", None)
+        testArguments["BinPath"] = os.environ.get("BinPath", None)
 
         testWorkload = promptrecoWorkload("TestWorkload", testArguments)
         testWorkload.setSpecUrl("somespec")

@@ -155,6 +155,44 @@ class WMStepHelper(TreeHelper):
 
         return None
 
+    def setIgnoredOutputModules(self, moduleList):
+        """
+        _setIgnoredOutputModules_
+
+        Set a list of output modules to be ignored,
+        only CMSSW steps will use this
+        """
+
+        self.data.output.ignoredModules = moduleList
+        return
+    
+    def setNewStageoutOverride(self, newValue):
+        """
+        A toggle for steps to use old or new stageout code
+        """
+        self.data.newStageout = newValue
+    
+    def getNewStageoutOverride(self):
+        """
+        A toggle for steps to use old or new stageout code
+        """
+        if hasattr(self.data, 'newStageout'):
+            return self.data.newStageout
+        else:
+            return False
+
+    def getIgnoredOutputModules(self):
+        """
+        _ignoreOutputModules_
+
+        Get a list of output modules to be ignored,
+        if the attribute is not set then return an empty list
+        """
+
+        if hasattr(self.data.output, 'ignoredModules'):
+            return self.data.output.ignoredModules
+        return []
+
     def getUserSandboxes(self):
         if hasattr(self.data, 'user'):
             if hasattr(self.data.user, 'inputSandboxes'):

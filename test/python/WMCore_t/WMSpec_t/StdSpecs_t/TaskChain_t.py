@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-TaskChain_t.py
+_TaskChain_t_
 
 Created by Dave Evans on 2011-06-21.
 Copyright (c) 2011 Fermilab. All rights reserved.
 """
 
-import sys
 import os
 import unittest
 
@@ -15,7 +14,6 @@ from WMCore.WMSpec.StdSpecs.TaskChain import TaskChainWorkloadFactory
 from WMQuality.TestInitCouchApp import TestInitCouchApp
 from WMCore.Database.CMSCouch import CouchServer, Document
 from WMCore.WorkQueue.WMBSHelper import WMBSHelper
-
 
 from WMCore.WMBS.Fileset import Fileset
 from WMCore.WMBS.Subscription import Subscription
@@ -41,19 +39,19 @@ def makeGeneratorConfig(couchDatabase):
                                                                           "dataTier": "GEN-SIM"}}}}
     result = couchDatabase.commitOne(newConfig)
     return result[0]["id"]
-    
 
-    
+
+
 def makeProcessingConfigs(couchDatabase):
     """
     _makeProcessingConfigs_
-    
+
     Make a bunch of processing configs in couch for a processing chain consisting of
-    
+
     DigiHLT - Reco - ALCAReco - Skims
-    
+
     returns a map of config names to IDs
-    
+
     """
     rawConfig = Document()
     rawConfig["info"] = None
@@ -74,9 +72,9 @@ def makeProcessingConfigs(couchDatabase):
        "process": {"outputModules_": ["writeRECO", "writeAOD", "writeALCA"],
                    "writeRECO": {"dataset": {"dataTier": "RECO", "filterName" : "reco"}},
                    "writeAOD":  {"dataset": {"dataTier": "AOD", "filterName" : "AOD"}},
-                   "writeALCA":  {"dataset": {"dataTier": "ALCARECO", "filterName" : "alca"}},                                                  
+                   "writeALCA":  {"dataset": {"dataTier": "ALCARECO", "filterName" : "alca"}},
                 }
-        }                        
+        }
     alcaConfig = Document()
     alcaConfig["info"] = None
     alcaConfig["config"] = None
@@ -90,8 +88,8 @@ def makeProcessingConfigs(couchDatabase):
                    "writeALCA3":  {"dataset": {"dataTier": "ALCARECO", "filterName": "alca3"}},
                    "writeALCA4":  {"dataset": {"dataTier": "ALCARECO", "filterName": "alca4"}},
                 }
-        }                        
-        
+        }
+
     skimsConfig = Document()
     skimsConfig["info"] = None
     skimsConfig["config"] = None
@@ -104,21 +102,21 @@ def makeProcessingConfigs(couchDatabase):
                    "writeSkim2":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim2"}},
                    "writeSkim3":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim3"}},
                    "writeSkim4":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim4"}},
-                   "writeSkim5":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim5"}},                   
+                   "writeSkim5":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim5"}},
                 }
         }
-    couchDatabase.queue(rawConfig)          
-    couchDatabase.queue(recoConfig)   
-    couchDatabase.queue(alcaConfig)   
-    couchDatabase.queue(skimsConfig)   
+    couchDatabase.queue(rawConfig)
+    couchDatabase.queue(recoConfig)
+    couchDatabase.queue(alcaConfig)
+    couchDatabase.queue(skimsConfig)
     result = couchDatabase.commit()
-    
+
     docMap = {
         "DigiHLT" : result[0][u'id'],
         "Reco"    : result[1][u'id'],
         "ALCAReco": result[2][u'id'],
         "Skims"   : result[3][u'id'],
-    }                               
+    }
     return docMap
 
 
@@ -138,22 +136,22 @@ def makePromptSkimConfigs(couchDatabase):
                    "writeSkim2":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim2"}},
                    "writeSkim3":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim3"}},
                    "writeSkim4":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim4"}},
-                   "writeSkim5":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim5"}},                   
+                   "writeSkim5":  {"dataset": {"dataTier": "RECO-AOD", "filterName": "skim5"}},
                 }
         }
-    couchDatabase.queue(skimsConfig)   
+    couchDatabase.queue(skimsConfig)
     result = couchDatabase.commit()
     docMap = {
-        "Skims" :result[0][u'id'] 
+        "Skims" :result[0][u'id']
     }
     return docMap
 
 def outputModuleList(task):
     """
     _outputModuleList_
-    
+
     util to return list of output module names
-    
+
     """
     result = []
     for om in task.getOutputModulesForTask():
@@ -167,18 +165,19 @@ class TaskChainTests(unittest.TestCase):
         _setUp_
 
         Initialize the database and couch.
-        
+
         """
         self.testInit = TestInitCouchApp(__file__)
         self.testInit.setLogging()
         self.testInit.setDatabaseConnection()
-        self.testInit.setupCouch("taskchain_t", "ConfigCache")        
+        self.testInit.setupCouch("taskchain_t", "ConfigCache")
         self.testInit.setSchema(customModules = ["WMCore.WMBS"],
                                 useDefault = False)
 
         couchServer = CouchServer(os.environ["COUCHURL"])
         self.configDatabase = couchServer.connectDatabase("taskchain_t")  
-        self.workload = None      
+        self.testInit.generateWorkDir()
+        self.workload = None
         return
 
 
@@ -187,22 +186,25 @@ class TaskChainTests(unittest.TestCase):
         _tearDown_
 
         Clear out the database.
-        
+
         """
-        del self.workload
         self.testInit.tearDownCouch()
         self.testInit.clearDatabase()
+        self.testInit.delWorkDir()
         return
 
-
-    def testA(self):
+    def testGeneratorWorkflow(self):
         """
-        test creating workload with generator config
+        _testGeneratorWorkflow_
+        Test creating a request with an initial generator task
+        it mocks a request where there are 2 similar paths starting
+        from the generator, each one with a different PrimaryDataset, CMSSW configuration
+        and processed dataset. Dropping the RAW output as well.
         """
         generatorDoc = makeGeneratorConfig(self.configDatabase)
         processorDocs = makeProcessingConfigs(self.configDatabase)
-        
-        
+
+
         arguments = {
             "AcquisitionEra": "ReleaseValidation",
             "Requestor": "sfoulkes@fnal.gov",
@@ -215,10 +217,10 @@ class TaskChainTests(unittest.TestCase):
             "SiteWhitelist" : ["T1_CH_CERN", "T1_US_FNAL"],
             "DashboardHost": "127.0.0.1",
             "DashboardPort": 8884,
-            "TaskChain" : 5,
+            "TaskChain" : 6,
             "Task1" :{
                 "TaskName" : "GenSim",
-                "ConfigCacheID" : generatorDoc, 
+                "ConfigCacheID" : generatorDoc,
                 "SplittingAlgorithm"  : "EventBased",
                 "SplittingArguments" : {"events_per_job" : 250},
                 "RequestNumEvents" : 10000,
@@ -226,166 +228,242 @@ class TaskChainTests(unittest.TestCase):
                 "PrimaryDataset" : "RelValTTBar",
             },
             "Task2" : {
-                "TaskName" : "DigiHLT",
+                "TaskName" : "DigiHLT_new",
                 "InputTask" : "GenSim",
                 "InputFromOutputModule" : "writeGENSIM",
                 "ConfigCacheID" : processorDocs['DigiHLT'],
-                "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 1 },
+                "SplittingAlgorithm" : "LumiBased",
+                "SplittingArguments" : {"lumis_per_job" : 2 },
+                "CMSSWVersion" : "CMSSW_5_2_6",
+                "GlobalTag" : "GR_39_P_V5:All",
+                "PrimaryDataset" : "PURelValTTBar",
+                "KeepOutput" : False
             },
             "Task3" : {
+                "TaskName" : "DigiHLT_ref",
+                "InputTask" : "GenSim",
+                "InputFromOutputModule" : "writeGENSIM",
+                "ConfigCacheID" : processorDocs['DigiHLT'],
+                "SplittingAlgorithm" : "EventBased",
+                "SplittingArguments" : {"events_per_job" : 100 },
+                "CMSSWVersion" : "CMSSW_5_2_7",
+                "GlobalTag" : "GR_40_P_V5:All",
+                "AcquisitionEra" : "ReleaseValidationNewConditions",
+                "ProcessingVersion" : 3,
+                "ProcessingString" : "Test",
+                "KeepOutput" : False
+            },
+            "Task4" : {
                 "TaskName" : "Reco",
-                "InputTask" : "DigiHLT",
+                "InputTask" : "DigiHLT_new",
                 "InputFromOutputModule" : "writeRAWDIGI",
                 "ConfigCacheID" : processorDocs['Reco'],
                 "SplittingAlgorithm" : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 1 },
             },
-            "Task4" : {
-                "TaskName" : "ALCAReco",
-                "InputTask" : "Reco",
-                "InputFromOutputModule" : "writeALCA",
-                "ConfigCacheID" : processorDocs['ALCAReco'],
-                "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 1 },
-            
-            },
             "Task5" : {
+                "TaskName" : "ALCAReco",
+                "InputTask" : "DigiHLT_ref",
+                "InputFromOutputModule" : "writeRAWDIGI",
+                "ConfigCacheID" : processorDocs['ALCAReco'],
+                "SplittingAlgorithm" : "LumiBased",
+                "SplittingArguments" : {"lumis_per_job" : 8 },
+
+
+            },
+            "Task6" : {
                 "TaskName" : "Skims",
                 "InputTask" : "Reco",
                 "InputFromOutputModule" : "writeRECO",
                 "ConfigCacheID" : processorDocs['Skims'],
-                "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 10 },            
+                "SplittingAlgorithm" : "LumiBased",
+                "SplittingArguments" : {"lumis_per_job" : 10 },
+
             }
-            
+
         }
 
         factory = TaskChainWorkloadFactory()
-        
+
         try:
             self.workload = factory("PullingTheChain", arguments)
         except Exception, ex:
             msg = "Error invoking TaskChainWorkloadFactory:\n%s" % str(ex)
             self.fail(msg)
-        
-        
+
+
         self.workload.setSpecUrl("somespec")
         self.workload.setOwnerDetails("evansde@fnal.gov", "DMWM")
 
-
-        testWMBSHelper = WMBSHelper(self.workload, "GenSim", "SomeBlock")
+        testWMBSHelper = WMBSHelper(self.workload, "GenSim", "SomeBlock", cachepath = self.testInit.testDir)
         testWMBSHelper.createTopLevelFileset()
         testWMBSHelper.createSubscription(testWMBSHelper.topLevelTask, testWMBSHelper.topLevelFileset)
 
         firstTask = self.workload.getTaskByPath("/PullingTheChain/GenSim")
 
         self._checkTask(firstTask, arguments['Task1'])
-        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT"), arguments['Task2'])
-        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco"),
-                        arguments['Task3'])
-        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergewriteALCA/ALCAReco"),
+        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT_new"), arguments['Task2'])
+        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT_ref"), arguments['Task3'])
+        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT_new/Reco"),
                         arguments['Task4'])
-        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergewriteRECO/Skims"),
-                        arguments['Task5'])        
-        
-        
-        
+        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT_ref/ALCAReco"),
+                        arguments['Task5'])
+        self._checkTask(self.workload.getTaskByPath("/PullingTheChain/GenSim/GenSimMergewriteGENSIM/DigiHLT_new/Reco/RecoMergewriteRECO/Skims"),
+                        arguments['Task6'])
+
+        # Verify the output datasets
+        outputDatasets = self.workload.listOutputDatasets()
+        self.assertEqual(len(outputDatasets), 15, "Number of output datasets doesn't match")
+        self.assertTrue("/RelValTTBar/ReleaseValidation-GenSimFilter-v1/GEN-SIM" in outputDatasets,
+                        "/RelValTTBar/ReleaseValidation-GenSimFilter-v1/GEN-SIM not in output datasets")
+        self.assertTrue("/PURelValTTBar/ReleaseValidation-RawDigiFilter-v1/RAW-DIGI" in outputDatasets,
+                        "/PURelValTTBar/ReleaseValidation-RawDigiFilter-v1/RAW-DIGI not in output datasets")
+        self.assertTrue("/RelValTTBar/ReleaseValidationNewConditions-RawDigiFilter-Test-v3/RAW-DIGI" in outputDatasets,
+                        "/RelValTTBar/ReleaseValidationNewConditions-RawDigiFilter-Test-v3/RAW-DIGI not in output datasets")
+        self.assertTrue("/RelValTTBar/ReleaseValidation-reco-v1/RECO" in outputDatasets,
+                        "/RelValTTBar/ReleaseValidation-reco-v1/RECO not in output datasets")
+        self.assertTrue("/RelValTTBar/ReleaseValidation-AOD-v1/AOD" in outputDatasets,
+                        "/RelValTTBar/ReleaseValidation-AOD-v1/AOD not in output datasets")
+        self.assertTrue("/RelValTTBar/ReleaseValidation-alca-v1/ALCARECO" in outputDatasets,
+                        "/RelValTTBar/ReleaseValidation-alca-v1/ALCARECO not in output datasets")
+        for i in range(1, 5):
+            self.assertTrue("/RelValTTBar/ReleaseValidation-alca%d-v1/ALCARECO" % i in outputDatasets,
+                            "/RelValTTBar/ReleaseValidation-alca%d-v1/ALCARECO not in output datasets" % i)
+        for i in range(1, 6):
+            self.assertTrue("/RelValTTBar/ReleaseValidation-skim%d-v1/RECO-AOD" % i in outputDatasets,
+                            "/RelValTTBar/ReleaseValidation-skim%d-v1/RECO-AOD not in output datasets" % i)
+
+        return
+
 
     def _checkTask(self, task, taskConf):
         """
         _checkTask_
-        
-        Give the provided task instance the once over, make sure parentage is set correctly etc
-        
+
+        Verify the correctness of the task
+
         """
-        if taskConf.has_key("InputTask"):
-            inpTask = taskConf['InputTask']
-            inpMod = taskConf['InputFromOutputModule']
+        if "InputTask" in taskConf:
             inpTaskPath = task.getPathName()
             inpTaskPath = inpTaskPath.replace(task.name(), "")
             inpTaskPath += "cmsRun1"
-            self.assertEqual(task.data.input.inputStep, inpTaskPath)
+            self.assertEqual(task.data.input.inputStep, inpTaskPath, "Input step is wrong in the spec")
+            self.assertTrue(taskConf["InputTask"] in inpTaskPath, "Input task is not in the path name for child task")
 
-        
+        if "MCPileup" in taskConf or "DataPileup" in taskConf:
+            mcDataset = taskConf.get('MCPileup', None)
+            dataDataset = taskConf.get('DataPileup', None)
+            if mcDataset:
+                self.assertEqual(task.data.steps.cmsRun1.pileup.mc.dataset, [mcDataset])
+            if dataDataset:
+                self.assertEqual(task.data.steps.cmsRun1.pileup.data.dataset, [dataDataset])
+
         workflow = Workflow(name = self.workload.name(),
                             task = task.getPathName())
         workflow.load()
-        mods = outputModuleList(task)
 
-        for mod in mods:
-            filesets = workflow.outputMap[mod][0]
+        outputMods = outputModuleList(task)
+        self.assertEqual(len(workflow.outputMap.keys()), len(outputMods),
+                         "Error: Wrong number of WF outputs")
+
+        for outputModule in outputMods:
+            filesets = workflow.outputMap[outputModule][0]
             merged = filesets['merged_output_fileset']
             unmerged = filesets['output_fileset']
-            
+
             merged.loadData()
             unmerged.loadData()
-            mergedset = task.getPathName() + "/" + task.name() + "Merge" + mod + "/merged-Merged"
-            if mod == "logArchive":
-                mergedset = task.getPathName() + "/unmerged-" + mod
-            unmergedset = task.getPathName() + "/unmerged-" + mod
-            
-            self.failUnless(mergedset == merged.name)
-            self.failUnless(unmergedset == unmerged.name)
 
-            if mod == "logArchive": continue
-            
-            mergeTask = task.getPathName() + "/" + task.name() + "Merge" + mod
-            
-            mergeWorkflow = Workflow(name = self.workload.name(),
-                                     task = mergeTask)
-            mergeWorkflow.load()
-            if not mergeWorkflow.outputMap.has_key("Merged"):
-                msg = "Merge workflow does not contain a Merged output key"
-                self.fail(msg)
-            mrgFileset = mergeWorkflow.outputMap['Merged'][0]
-            mergedFS = mrgFileset['merged_output_fileset']
-            unmergedFS = mrgFileset['output_fileset']
-            mergedFS.loadData()
-            unmergedFS.loadData()
-            self.assertEqual(mergedFS.name, mergedset)
-            self.assertEqual(unmergedFS.name, mergedset)
-            
-            mrgLogArch = mergeWorkflow.outputMap['logArchive'][0]['merged_output_fileset']
-            umrgLogArch = mergeWorkflow.outputMap['logArchive'][0]['output_fileset']
-            mrgLogArch.loadData()
-            umrgLogArch.loadData()
-            
-            archName = task.getPathName() + "/" + task.name() + "Merge" + mod + "/merged-logArchive"
-            
-            self.assertEqual(mrgLogArch.name, archName)
-            self.assertEqual(umrgLogArch.name,archName)
-            
-            
-        
-        #
-        # test subscriptions made by this task if it is the first task
-        #
-        if taskConf.has_key("InputDataset") or taskConf.has_key("PrimaryDataset"):
-            taskFileset = Fileset(name = "%s-%s-SomeBlock" % (self.workload.name(), task.name() ))
-            taskFileset.loadData()
+            mergedset = task.getPathName() + "/" + task.name() + "Merge" + outputModule + "/merged-Merged"
+            if outputModule == "logArchive" or not taskConf.get("KeepOutput", True):
+                mergedset = task.getPathName() + "/unmerged-" + outputModule
+            unmergedset = task.getPathName() + "/unmerged-" + outputModule
 
-            taskSubscription = Subscription(fileset = taskFileset, workflow = workflow)
-            taskSubscription.loadData()
-        
-            if taskConf.has_key("PrimaryDataset"):
-                # generator type
-                self.assertEqual(taskSubscription["type"], "Production",
-                                 "Error: Wrong subscription type.")
-                self.assertEqual(taskSubscription["split_algo"], taskConf["SplittingAlgorithm"],
-                                 "Error: Wrong split algo.")
-            if taskConf.has_key("InputDataset"):
-                # processor type
-                self.assertEqual(taskSubscription["type"], "Processing", "Wrong subscription type for processing first task")
+            self.assertEqual(mergedset, merged.name, "Merged fileset name is wrong")
+            self.assertEqual(unmergedset, unmerged.name, "Unmerged fileset name  is wrong")
+
+            if outputModule != "logArchive" and taskConf.get("KeepOutput", True):
+                mergeTask = task.getPathName() + "/" + task.name() + "Merge" + outputModule
+
+                mergeWorkflow = Workflow(name = self.workload.name(),
+                                         task = mergeTask)
+                mergeWorkflow.load()
+                self.assertTrue("Merged" in mergeWorkflow.outputMap, "Merge workflow does not contain a Merged output key")
+                mergedOutputMod = mergeWorkflow.outputMap['Merged'][0]
+                mergedFileset = mergedOutputMod['merged_output_fileset']
+                unmergedFileset = mergedOutputMod['output_fileset']
+                mergedFileset.loadData()
+                unmergedFileset.loadData()
+                self.assertEqual(mergedFileset.name, mergedset, "Merged fileset name in merge task is wrong")
+                self.assertEqual(unmergedFileset.name, mergedset, "Unmerged fileset name in merge task is wrong")
+
+                mrgLogArch = mergeWorkflow.outputMap['logArchive'][0]['merged_output_fileset']
+                umrgLogArch = mergeWorkflow.outputMap['logArchive'][0]['output_fileset']
+                mrgLogArch.loadData()
+                umrgLogArch.loadData()
+
+                archName = task.getPathName() + "/" + task.name() + "Merge" + outputModule + "/merged-logArchive"
+
+                self.assertEqual(mrgLogArch.name, archName, "LogArchive merged fileset name is wrong in merge task")
+                self.assertEqual(umrgLogArch.name, archName, "LogArchive unmerged fileset name is wrong in merge task")
+
+            if outputModule != "logArchive":
+                taskOutputMods = task.getOutputModulesForStep(stepName = "cmsRun1")
+                currentModule = getattr(taskOutputMods, outputModule)
+                if "PrimaryDataset" in taskConf:
+                    self.assertEqual(currentModule.primaryDataset, taskConf["PrimaryDataset"], "Wrong primary dataset")
+                processedDatasetParts = ["AcquisitionEra, ProcessingString, ProcessingVersion"]
+                allParts = True
+                for part in processedDatasetParts:
+                    if part in taskConf:
+                        self.asserTrue(part in currentModule.processedDataset, "Wrong processed dataset for module")
+                    else:
+                        allParts = False
+                if allParts:
+                    print "yes"
+                    self.assertEqual("%s-%s-v%s" % (taskConf["AcquisitionEra"], taskConf["ProcessingString"],
+                                                   taskConf["ProcessingVersion"]), "Wrong processed dataset for module")
+
+        #Test subscriptions
+        if "InputTask" not in taskConf:
+            inputFileset = "%s-%s-SomeBlock" % (self.workload.name(), task.name())
+        elif "Merge" in task.getPathName().split("/")[-2]:
+            inpTaskPath = task.getPathName().replace(task.name(), "")
+            inputFileset = inpTaskPath + "merged-Merged"
+        else:
+            inpTaskPath = task.getPathName().replace(task.name(), "")
+            inputFileset = inpTaskPath + "unmerged-%s" % taskConf["InputFromOutputModule"]
+        taskFileset = Fileset(name = inputFileset)
+        taskFileset.loadData()
+
+        taskSubscription = Subscription(fileset = taskFileset, workflow = workflow)
+        taskSubscription.loadData()
+
+        if "InputTask" not in taskConf and "InputDataset" not in taskConf:
+            # Production type
+            self.assertEqual(taskSubscription["type"], "Production",
+                             "Error: Wrong subscription type for processing task")
+            self.assertEqual(taskSubscription["split_algo"], taskConf["SplittingAlgorithm"],
+                             "Error: Wrong split algo for generation task")
+        else:
+            # Processing type
+            self.assertEqual(taskSubscription["type"], "Processing", "Wrong subscription type for task")
+            if taskSubscription["split_algo"] != "WMBSMergeBySize":
                 self.assertEqual(taskSubscription["split_algo"], taskConf['SplittingAlgorithm'], "Splitting algo mismatch")
-                                 
+            else:
+                self.assertEqual(taskFileset.name, inpTaskPath + "unmerged-%s" % taskConf["InputFromOutputModule"],
+                                 "Subscription uses WMBSMergeBySize on a merge fileset")
 
-    def testB(self):
+        return
+
+    def testMultipleGlobalTags(self):
         """
-        _testB_
-        
-        test creating an all processor workload with an input dataset
-        
+        _testMultipleGlobalTags_
+
+        Test creating a workload that starts in a processing task
+        with an input dataset, and has different globalTags
+        and CMSSW versions (with corresponding scramArch) in
+        each task
         """
         processorDocs = makeProcessingConfigs(self.configDatabase)
         arguments = {
@@ -404,7 +482,7 @@ class TaskChainTests(unittest.TestCase):
             "Task1" :{
                 "TaskName" : "DigiHLT",
                 "ConfigCacheID" : processorDocs['DigiHLT'],
-                "InputDataset" : "/MinimumBias/Commissioning10-v4/GEN-SIM", 
+                "InputDataset" : "/MinimumBias/Commissioning10-v4/GEN-SIM",
                 "SplittingAlgorithm"  : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 1}
             },
@@ -416,6 +494,9 @@ class TaskChainTests(unittest.TestCase):
                 "SplittingAlgorithm" : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 1 },
                 "GlobalTag" : "GlobalTagForReco",
+                "CMSSWVersion" : "CMSSW_RECO_1",
+                "ScramArch" : "CompatibleRECOArch",
+                "PrimaryDataset" : "ZeroBias",
             },
             "Task3" : {
                 "TaskName" : "ALCAReco",
@@ -424,7 +505,10 @@ class TaskChainTests(unittest.TestCase):
                 "ConfigCacheID" : processorDocs['ALCAReco'],
                 "SplittingAlgorithm" : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 1 },
-                "GlobalTag" : "GlobalTagForALCAReco",   
+                "GlobalTag" : "GlobalTagForALCAReco",
+                "CMSSWVersion" : "CMSSW_ALCA_1",
+                "ScramArch" : "CompatibleALCAArch",
+
             },
             "Task4" : {
                 "TaskName" : "Skims",
@@ -433,11 +517,10 @@ class TaskChainTests(unittest.TestCase):
                 "ConfigCacheID" : processorDocs['Skims'],
                 "SplittingAlgorithm" : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 10 }, 
-                "GlobalTag" : "GlobalTagForSkims"           
             }
         }
-    
-        factory = TaskChainWorkloadFactory()        
+
+        factory = TaskChainWorkloadFactory()
         try:
             self.workload = factory("YankingTheChain", arguments)
         except Exception, ex:
@@ -448,8 +531,7 @@ class TaskChainTests(unittest.TestCase):
         self.workload.setSpecUrl("somespec")
         self.workload.setOwnerDetails("evansde@fnal.gov", "DMWM")
 
-
-        testWMBSHelper = WMBSHelper(self.workload, "DigiHLT", "SomeBlock")
+        testWMBSHelper = WMBSHelper(self.workload, "DigiHLT", "SomeBlock", cachepath = self.testInit.testDir)
         testWMBSHelper.createTopLevelFileset()
         testWMBSHelper.createSubscription(testWMBSHelper.topLevelTask, testWMBSHelper.topLevelFileset)
 
@@ -460,33 +542,57 @@ class TaskChainTests(unittest.TestCase):
                         arguments['Task3'])
         self._checkTask(self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergewriteRECO/Skims"),
                         arguments['Task4'])
- 
+
         digi = self.workload.getTaskByPath("/YankingTheChain/DigiHLT")
         digiStep = digi.getStepHelper("cmsRun1")
         self.assertEqual(digiStep.getGlobalTag(), arguments['GlobalTag'])
+        self.assertEqual(digiStep.getCMSSWVersion(), arguments['CMSSWVersion'])
+        self.assertEqual(digiStep.getScramArch(), arguments['ScramArch'])
  
         reco = self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco")
         recoStep = reco.getStepHelper("cmsRun1")
         self.assertEqual(recoStep.getGlobalTag(), arguments['Task2']['GlobalTag'])
+        self.assertEqual(recoStep.getCMSSWVersion(), arguments['Task2']['CMSSWVersion'])
+        self.assertEqual(recoStep.getScramArch(), arguments['Task2']['ScramArch'])
  
         alca = self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergewriteALCA/ALCAReco")
         alcaStep = alca.getStepHelper("cmsRun1")
         self.assertEqual(alcaStep.getGlobalTag(), arguments['Task3']['GlobalTag'])
+        self.assertEqual(alcaStep.getCMSSWVersion(), arguments['Task3']['CMSSWVersion'])
+        self.assertEqual(alcaStep.getScramArch(), arguments['Task3']['ScramArch'])
 
         skim = self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergewriteRECO/Skims")
         skimStep = skim.getStepHelper("cmsRun1")
-        self.assertEqual(skimStep.getGlobalTag(), arguments['Task4']['GlobalTag'])
-        
+        self.assertEqual(skimStep.getGlobalTag(), arguments['GlobalTag'])
+        self.assertEqual(skimStep.getCMSSWVersion(), arguments['CMSSWVersion'])
+        self.assertEqual(skimStep.getScramArch(), arguments['ScramArch'])
+
+        # Verify the output datasets
+        outputDatasets = self.workload.listOutputDatasets()
+        self.assertEqual(len(outputDatasets), 13, "Number of output datasets doesn't match")
+        self.assertTrue("/MinimumBias/ReleaseValidation-RawDigiFilter-v1/RAW-DIGI" in outputDatasets,
+                        "/MinimumBias/ReleaseValidation-RawDigiFilter-v1/RAW-DIGI not in output datasets")
+        self.assertTrue("/ZeroBias/ReleaseValidation-reco-v1/RECO" in outputDatasets,
+                        "/ZeroBias/ReleaseValidation-reco-v1/RECO not in output datasets")
+        self.assertTrue("/ZeroBias/ReleaseValidation-AOD-v1/AOD" in outputDatasets,
+                        "/ZeroBias/ReleaseValidation-AOD-v1/AOD not in output datasets")
+        self.assertTrue("/ZeroBias/ReleaseValidation-alca-v1/ALCARECO" in outputDatasets,
+                        "/ZeroBias/ReleaseValidation-alca-v1/ALCARECO not in output datasets")
+        for i in range(1, 5):
+            self.assertTrue("/MinimumBias/ReleaseValidation-alca%d-v1/ALCARECO" % i in outputDatasets,
+                            "/MinimumBias/ReleaseValidation-alca%d-v1/ALCARECO not in output datasets" % i)
+        for i in range(1, 6):
+            self.assertTrue("/MinimumBias/ReleaseValidation-skim%d-v1/RECO-AOD" % i in outputDatasets,
+                            "/MinimumBias/ReleaseValidation-skim%d-v1/RECO-AOD not in output datasets" % i)
+
+        return
  
-        
- 
-    def testC(self):
+    def testProcessingWithScenarios(self):
         """
-        _testC_
+        _testProcessingWithScenarios_
 
-        test creating an all processor workload with an input dataset and uses scenarios instead
-        of config cache for a couple of the configs
-
+        Test creating a processing workload with an input dataset that
+        uses scenarios instead of configuration files
         """
         processorDocs = makeProcessingConfigs(self.configDatabase)
         arguments = {
@@ -505,7 +611,7 @@ class TaskChainTests(unittest.TestCase):
             "Task1" :{
                 "TaskName" : "DigiHLT",
                 "ConfigCacheID" : processorDocs['DigiHLT'],
-                "InputDataset" : "/MinimumBias/Commissioning10-v4/GEN-SIM", 
+                "InputDataset" : "/MinimumBias/Commissioning10-v4/GEN-SIM",
                 "SplittingAlgorithm"  : "FileBased",
                 "SplittingArguments" : {"files_per_job" : 1},
             },
@@ -513,7 +619,7 @@ class TaskChainTests(unittest.TestCase):
                 "TaskName" : "Reco",
                 "InputTask" : "DigiHLT",
                 "InputFromOutputModule" : "writeRAWDIGI",
-                "Scenario" : "pp",
+                "ProcScenario" : "pp",
                 "ScenarioMethod" : "promptReco",
                 "ScenarioArguments" : { 'outputs' : [ { 'dataTier' : "RECO",
                                                         'moduleLabel' : "RECOoutput" },
@@ -528,7 +634,7 @@ class TaskChainTests(unittest.TestCase):
                 "TaskName" : "ALCAReco",
                 "InputTask" : "Reco",
                 "InputFromOutputModule" : "ALCARECOoutput",
-                "Scenario" : "pp",
+                "ProcScenario" : "pp",
                 "ScenarioMethod" : "alcaReco",
                 "ScenarioArguments" : { 'outputs' : [ { 'dataTier' : "ALCARECO",
                                                         'moduleLabel' : "ALCARECOoutput" } ] },
@@ -542,7 +648,7 @@ class TaskChainTests(unittest.TestCase):
                 "InputFromOutputModule" : "RECOoutput",
                 "ConfigCacheID" : processorDocs['Skims'],
                 "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 10 },            
+                "SplittingArguments" : {"files_per_job" : 10 },
             }
         }
 
@@ -558,7 +664,7 @@ class TaskChainTests(unittest.TestCase):
         self.workload.setOwnerDetails("evansde@fnal.gov", "DMWM")
 
 
-        testWMBSHelper = WMBSHelper(self.workload, "DigiHLT", "SomeBlock")
+        testWMBSHelper = WMBSHelper(self.workload, "DigiHLT", "SomeBlock", cachepath = self.testInit.testDir)
         testWMBSHelper.createTopLevelFileset()
         testWMBSHelper.createSubscription(testWMBSHelper.topLevelTask, testWMBSHelper.topLevelFileset)
 
@@ -569,102 +675,23 @@ class TaskChainTests(unittest.TestCase):
                         arguments['Task3'])
         self._checkTask(self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergeRECOoutput/Skims"),
                         arguments['Task4'])
-        
-        
-        
+
+
+
         reco = self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco")
         recoStep = reco.getStepHelper("cmsRun1")
         recoAppConf = recoStep.data.application.configuration
-        self.assertEqual(recoAppConf.scenario, arguments['Task2']['Scenario'])
+        self.assertEqual(recoAppConf.scenario, arguments['Task2']['ProcScenario'])
         self.assertEqual(recoAppConf.function, arguments['Task2']['ScenarioMethod'])
-        
+
         alca = self.workload.getTaskByPath("/YankingTheChain/DigiHLT/DigiHLTMergewriteRAWDIGI/Reco/RecoMergeALCARECOoutput/ALCAReco")
         alcaStep = alca.getStepHelper("cmsRun1")
         alcaAppConf = alcaStep.data.application.configuration
-        self.assertEqual(alcaAppConf.scenario, arguments['Task3']['Scenario'])
+        self.assertEqual(alcaAppConf.scenario, arguments['Task3']['ProcScenario'])
         self.assertEqual(alcaAppConf.function, arguments['Task3']['ScenarioMethod'])
         
-    def testD(self):
-        """
-        Tier 0 style workload that incorporates some scenarios & some configs. 
+        return
         
-        To use for real, replace the Skim ConfigCache URL and ID with a real
-        skim config in config cache, Oli suggested this as a source:
-        http://cmssw.cvs.cern.ch/cgi-bin/cmssw.cgi/CMSSW/Configuration/Skimming/test/tier1/skim_DoubleElectron.py?revision=1.3&pathrev=SkimsFor426
-        
-        """
 
-        cfgs = makePromptSkimConfigs(self.configDatabase)
-        arguments = {
-            "AcquisitionEra": "ReleaseValidation",
-            "Requestor": "gutsche@fnal.gov",
-            "CMSSWVersion": "CMSSW_3_5_8",
-            "ScramArch": "slc5_ia32_gcc434",
-            "ProcessingVersion": 1,
-            "GlobalTag": "NOTSET",
-            "CouchURL": self.testInit.couchUrl,
-            "CouchDBName": self.testInit.couchDbName,
-            "SiteWhitelist" : ["T1_CH_CERN", "T1_US_FNAL"],
-            "RunWhitelist" : [171050],
-            "DashboardHost": "127.0.0.1",
-            "DashboardPort": 8884,
-            "TaskChain" : 3,
-            "Task1" :{
-                "TaskName" : "PromptReco",
-                "InputDataset" : "/DoubleElectron/Run2011A-v1/RAW", 
-                "SplittingAlgorithm"  : "LumiBased",
-                "SplittingArguments" : {"lumis_per_job" : 1},
-                "Scenario" : "pp",
-                "ScenarioMethod" : "promptReco",
-                "ScenarioArguments" : { 'outputs' : [ { 'dataTier' : "RECO",
-                                                        'moduleLabel' : "RECOoutput" },
-                                                      { 'dataTier' : "AOD",
-                                                        'moduleLabel' : "AODoutput" },
-                                                      { 'dataTier' : "DQM",
-                                                        'moduleLabel' : "DQMoutput" },
-                                                      { 'dataTier' : "ALCARECO",
-                                                        'moduleLabel' : "ALCARECOoutput" } ] },
-                "GlobalTag" : "NOTSET"    
-            },
-            "Task2" : {
-                "TaskName" : "AlcaSkimming",
-                "InputTask" : "PromptReco",
-                "InputFromOutputModule" : "ALCARECOoutput",
-                "Scenario" : "pp",
-                "ScenarioMethod" : "alcaSkimming",
-                "ScenarioArguments" : { 'outputs' : [ { 'dataTier' : "ALCARECO",
-                                                        'moduleLabel' : "ALCARECOoutput" } ],
-                                        'skims' : ["EcalCalElectron"] },
-                "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 1 },
-                "GlobalTag" : "NOTSET"    
-            },
-            "Task3" : {
-                "TaskName" : "PromptSkim",
-                "InputTask" : "PromptReco",
-                "InputFromOutputModule" : "RECOoutput",
-                "ConfigCacheID" : cfgs['Skims'],
-                "GlobalTag" : "NOTSET",
-                "SplittingAlgorithm" : "FileBased",
-                "SplittingArguments" : {"files_per_job" : 10 }, 
-            }
-        }
-        factory = TaskChainWorkloadFactory()        
-        try:
-            self.workload = factory("Tier0Test", arguments)
-        except Exception, ex:
-            msg = "Error invoking TaskChainWorkloadFactory:\n%s" % str(ex)
-            self.fail(msg)
-
-
-        self.workload.setSpecUrl("somespec")
-        self.workload.setOwnerDetails("evansde@fnal.gov", "DMWM")
-
-
-        testWMBSHelper = WMBSHelper(self.workload, "PromptReco", "SomeBlock")
-        testWMBSHelper.createTopLevelFileset()
-        testWMBSHelper.createSubscription(testWMBSHelper.topLevelTask, testWMBSHelper.topLevelFileset)
-        
-        
 if __name__ == '__main__':
-	unittest.main()
+    unittest.main()

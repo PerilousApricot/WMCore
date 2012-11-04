@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 
 """
@@ -53,7 +53,7 @@ class StatusPoller(BaseWorkerThread):
         # init alert system
         self.initAlerts(compName = "StatusPoller")
         return
-    
+
     def algorithm(self, parameters = None):
         """
         _algorithm_
@@ -66,14 +66,14 @@ class StatusPoller(BaseWorkerThread):
         except WMException, ex:
             if getattr(myThread.transaction, None):
                 myThread.transaction.rollbackForError()
-            self.sendAlert(6, str(ex))
+            self.sendAlert(6, msg = str(ex))
             raise
         except Exception, ex:
             msg =  "Unhandled error in statusPoller"
             msg += str(ex)
-            logging.error(msg)
-            self.sendAlert(6, msg)
-            if getattr(myThread.transaction, None):
+            logging.exception(msg)
+            self.sendAlert(6, msg = msg)
+            if getattr(myThread, 'transaction', None):
                 myThread.transaction.rollbackForError()
             raise StatusPollerException(msg)
 
@@ -101,7 +101,7 @@ class StatusPoller(BaseWorkerThread):
 
         # Look for jobs that need to be killed
         jobsToKill = []
-        
+
         # Now check for timeouts
         for job in runningJobs:
             globalState = job.get('globalState', 'Error')
@@ -131,10 +131,8 @@ class StatusPoller(BaseWorkerThread):
     def terminate(self, params):
         """
         _terminate_
-        
+
         Kill the code after one final pass when called by the master thread.
         """
         logging.debug("terminating. doing one more pass before we die")
         self.algorithm(params)
-                
-            

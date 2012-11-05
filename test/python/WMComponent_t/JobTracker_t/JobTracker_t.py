@@ -139,8 +139,8 @@ class JobTrackerTest(unittest.TestCase):
         #self.testInit.clearDatabase(modules = ["WMCore.WMBS", "WMCore.BossAir", "WMCore.ResourceControl"])
         self.testInit.setSchema(customModules = ["WMCore.WMBS", "WMCore.BossAir", "WMCore.ResourceControl"],
                                 useDefault = False)
-        self.testInit.setupCouch("jobtracker_t/jobs", "JobDump")
-        self.testInit.setupCouch("jobtracker_t/fwjrs", "FWJRDump")
+#        self.testInit.setupCouch("jobtracker_t/jobs", "JobDump")
+#        self.testInit.setupCouch("jobtracker_t/fwjrs", "FWJRDump")
 
         self.daoFactory = DAOFactory(package = "WMCore.WMBS",
                                      logger = myThread.logger,
@@ -236,7 +236,6 @@ class JobTrackerTest(unittest.TestCase):
         config.component_('JobStateMachine')
         config.JobStateMachine.couchurl        = os.getenv('COUCHURL', 'cmssrv52.fnal.gov:5984')
         config.JobStateMachine.couchDBName     = "jobtracker_t"
-
         return config
 
 

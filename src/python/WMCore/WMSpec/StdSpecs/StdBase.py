@@ -90,6 +90,10 @@ class StdBase(object):
         self.procScenario = None
         self.enableHarvesting = True
         self.enableNewStageout = False
+        self.asyncDest = None
+        self.owner_vogroup = "DEFAULT"
+        self.owner_vorole = "DEFAULT"
+        self.stepType = "CMSSW"
         return
 
     def __call__(self, workloadName, arguments):
@@ -136,6 +140,11 @@ class StdBase(object):
         self.procScenario = arguments.get("ProcScenario", None)
         self.enableHarvesting = arguments.get("EnableHarvesting", True)
         self.enableNewStageout = arguments.get("EnableNewStageout", False)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
 
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True

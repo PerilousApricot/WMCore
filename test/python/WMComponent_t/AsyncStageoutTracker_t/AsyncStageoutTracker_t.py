@@ -319,7 +319,7 @@ else:
             else:
                 self.assertEqual( testJob.getState().lower(), 'asofailed')
                 
-            # now that the file has been transferred, make sure that the accountant
+            # now that the file has been transferred, make sure thac the accountant
             # sends it to jobsuccess
             jobAccountant = JobAccountantPoller(self.getWMAgentConfig())
             jobAccountant.setup()

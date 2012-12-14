@@ -20,6 +20,9 @@ def getCommonTestArgs():
     args['Requestor'] = "mmascher"
     args["CouchURL"] = os.environ.get("COUCHURL", None)
     args["CouchDBName"] = "test_wmagent_configcache"
+    # or alternatively CouchURL part can be replaced by ConfigCacheUrl,
+    # then ConfigCacheUrl + CouchDBName + ConfigCacheID
+    args["ConfigCacheUrl"] = None    
     args["ScramArch"] =  "slc5_ia32_gcc434"
     args['CMSSWVersion'] = "CMSSW_4_2_0"
     args["ProcessingVersion"] = 2
@@ -77,7 +80,7 @@ class AnalysisWorkloadFactory(StdBase):
         lfnBase = '/store/temp/user/%s' % self.userName
         self.unmergedLFNBase = lfnBase
         self.userOutBase = '%s/CRAB-Out' % lfnBase
-        self.logBase = '/store/temp/user/%s/logs/' % self.userName
+        self.logBase = '/store/temp/user/%s/logs' % self.userName
         self.logCollBase = '/store/user/%s/CRAB-Out' % self.userName
         self.lcPrefix, self.seName = remoteLFNPrefix(site=self.asyncDest, lfn=self.logCollBase)
 
@@ -133,8 +136,8 @@ class AnalysisWorkloadFactory(StdBase):
 
         # Force ACDC input if present
         self.inputStep = None
-        if self.ACDCID:
-            analysisTask.addInputACDC(self.ACDCURL, self.ACDCDBName, self.origRequest, self.ACDCID)
+        if self.Submission > 1: #resubmit
+            analysisTask.addInputACDC(self.ACDCURL, self.ACDCDBName, self.origRequest, None)
             self.inputDataset = None
             self.workload.setWorkQueueSplitPolicy("ResubmitBlock", self.analysisJobSplitAlgo, self.analysisJobSplitArgs)
         else:
@@ -143,6 +146,7 @@ class AnalysisWorkloadFactory(StdBase):
         outputMods = self.setupProcessingTask(analysisTask, "Analysis", inputDataset=self.inputDataset,
                                               inputStep=self.inputStep,
                                               couchURL = self.couchURL, couchDBName = self.couchDBName,
+                                              configCacheUrl = self.configCacheUrl,
                                               configDoc = self.configCacheID, splitAlgo = self.analysisJobSplitAlgo,
                                               splitArgs = self.analysisJobSplitArgs, \
                                               userDN = self.owner_dn, asyncDest = self.asyncDest,
@@ -169,9 +173,11 @@ class AnalysisWorkloadFactory(StdBase):
         # Workflow creation
         self.couchURL = arguments.get("CouchURL")
         self.couchDBName = arguments.get("CouchDBName", "wmagent_configcache")
-        self.minMergeSize = 1
-
         self.configCacheID = arguments.get("AnalysisConfigCacheDoc", None)
+        self.configCacheUrl = arguments.get("ConfigCacheUrl", None)
+        
+        self.minMergeSize = 1
+        
         self.frameworkVersion = arguments["CMSSWVersion"]
         self.acquisitionEra = arguments.get("PublishDataName", str(int(time.time())))
         self.globalTag = arguments.get("GlobalTag", None)
@@ -189,10 +195,12 @@ class AnalysisWorkloadFactory(StdBase):
         # ACDC and job splitting
         self.ACDCURL = arguments.get("ACDCUrl", "")
         self.ACDCDBName = arguments.get("ACDCDBName", "wmagent_acdc")
-        self.ACDCID = arguments.get("ACDCDoc", None)
+        self.Runs  = arguments.get("Runs" , None)
+        self.Lumis = arguments.get("Lumis", None)
+        self.Submission = arguments.get("Submission", 1)
         self.analysisJobSplitAlgo  = arguments.get("JobSplitAlgo", "EventBased")
 
-        if self.ACDCID and self.analysisJobSplitAlgo not in ['LumiBased']:
+        if self.Lumis and self.analysisJobSplitAlgo not in ['LumiBased']:
             raise RuntimeError('Running on selected lumis only supported in split mode(s) %s' %
                                'LumiBased')
 
@@ -200,15 +208,9 @@ class AnalysisWorkloadFactory(StdBase):
             self.analysisJobSplitArgs = arguments.get('JobSplitArgs', {'events_per_job' : 1000})
         elif self.analysisJobSplitAlgo == 'LumiBased':
             self.analysisJobSplitArgs = arguments.get('JobSplitArgs', {'lumis_per_job' : 15})
-            if self.ACDCID:
-                self.analysisJobSplitArgs.update(
-                            {'filesetName' : self.ACDCID,
-                             'collectionName' : self.origRequest,
-                             'couchURL' : self.ACDCURL,
-                             'couchDB' : self.ACDCDBName,
-                             'owner' : self.owner,
-                             'group' : self.group,
-                            })
+            if self.Lumis:
+                self.analysisJobSplitArgs.update({'lumis' : self.Lumis})
+                self.analysisJobSplitArgs.update({'runs'  : self.Runs})
             self.analysisJobSplitArgs.update(
                            {'halt_job_on_file_boundaries' : False,
                             'splitOnRun' : False,
@@ -241,3 +243,15 @@ class AnalysisWorkloadFactory(StdBase):
             self.raiseValidationException(msg = msg)
 
         return
+
+
+
+def analysisWorkload(workloadName, arguments):
+    """
+    _analysisWorkload_
+
+    Instantiate the AnalysisWorkflowFactory and have it generate a workload for
+    the given parameters.
+    """
+    myAnalysisFactory = AnalysisWorkloadFactory()
+    return myAnalysisFactory(workloadName, arguments)

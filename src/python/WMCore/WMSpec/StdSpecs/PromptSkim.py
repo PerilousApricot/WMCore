@@ -47,7 +47,10 @@ def getTestArguments():
 
         "CouchURL": os.environ.get("COUCHURL", None),
         "CouchDBName": "scf_wmagent_configcache",
-
+        # or alternatively CouchURL part can be replaced by ConfigCacheUrl,
+        # then ConfigCacheUrl + CouchDBName + ConfigCacheID
+        "ConfigCacheUrl": None,
+        
         "DashboardHost": "127.0.0.1",
         "DashboardPort": 8884,
 
@@ -70,7 +73,8 @@ def fixCVSUrl(url):
     return url
 
 def injectIntoConfigCache(frameworkVersion, scramArch, initCommand,
-                          configUrl, configLabel, couchUrl, couchDBName):
+                          configUrl, configLabel, couchUrl, couchDBName,
+                          envPath = None, binPath = None):
     """
     _injectIntoConfigCache_
     """
@@ -84,14 +88,22 @@ def injectIntoConfigCache(frameworkVersion, scramArch, initCommand,
 
     scramTempDir = tempfile.mkdtemp()
     wmcoreBase = getWMBASE()
-    envPath = os.path.normpath(os.path.join(wmcoreBase, "../../../../../../../../apps/wmagent/etc/profile.d/init.sh"))
+    if not envPath:
+        envPath = os.path.normpath(os.path.join(wmcoreBase, "../../../../../../../../apps/wmagent/etc/profile.d/init.sh"))
     scram = Scram(version = frameworkVersion, architecture = scramArch,
                   directory = scramTempDir, initialise = initCommand,
                   envCmd = "source %s" % envPath)
     scram.project()
     scram.runtime()
 
-    scram("python2.6 %s/../../../bin/inject-to-config-cache %s %s PromptSkimmer cmsdataops %s %s None" % (wmcoreBase,
+    if not binPath:
+        scram("python2.6 %s/../../../bin/inject-to-config-cache %s %s PromptSkimmer cmsdataops %s %s None" % (wmcoreBase,
+                                                                                                              couchUrl,
+                                                                                                              couchDBName,
+                                                                                                              configPath,
+                                                                                                              configLabel))
+    else:
+        scram("python2.6 %s/inject-to-config-cache %s %s PromptSkimmer cmsdataops %s %s None" % (binPath,
                                                                                                  couchUrl,
                                                                                                  couchDBName,
                                                                                                  configPath,
@@ -105,7 +117,7 @@ def parseT0ProcVer(procVer, procString = None):
     compoundProcVer = r"^(((?P<ProcString>[a-zA-Z0-9_]+)-)?v)?(?P<ProcVer>[0-9]+)$"
     match = re.match(compoundProcVer, procVer)
     if match:
-        return {'ProcString' : procString or match.group('ProcString'),
+        return {'ProcString' : match.group('ProcString') or procString,
                 'ProcVer' : int(match.group('ProcVer'))}
     logging.error('Processing version %s is not compatible'
                                 % procVer)
@@ -127,14 +139,16 @@ class PromptSkimWorkloadFactory(DataProcessingWorkloadFactory):
 
         Create a PromptSkimming workload with the given parameters.
         """
+        configCouchUrl = arguments.get("ConfigCacheUrl", None) or arguments["CouchURL"]
         injectIntoConfigCache(arguments["CMSSWVersion"], arguments["ScramArch"],
                               arguments["InitCommand"], arguments["SkimConfig"], workloadName,
-                              arguments["CouchURL"], arguments["CouchDBName"])
+                              configCouchUrl, arguments["CouchDBName"],
+                              arguments.get("EnvPath", None), arguments.get("BinPath", None))
 
         try:
-            configCache = ConfigCache(arguments["CouchURL"], arguments["CouchDBName"])
-            arguments["ProcConfigCacheID"] = configCache.getIDFromLabel(workloadName)
-            if not arguments["ProcConfigCacheID"]:
+            configCache = ConfigCache(configCouchUrl, arguments["CouchDBName"])
+            arguments["ConfigCacheID"] = configCache.getIDFromLabel(workloadName)
+            if not arguments["ConfigCacheID"]:
                 logging.error("The configuration was not uploaded to couch")
                 raise Exception
         except Exception:

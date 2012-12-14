@@ -11,14 +11,50 @@ import traceback
 import re
 
 from WMCore.Database.CMSCouch import CouchServer
-from WMCore.Database.CMSCouch import CouchConflictError, CouchNotFoundError
+from WMCore.Database.CMSCouch import CouchNotFoundError, CouchError
 from WMCore.DataStructs.WMObject import WMObject
 from WMCore.JobStateMachine.Transitions import Transitions
-from WMCore.Services.UUID import makeUUID
 from WMCore.Services.Dashboard.DashboardReporter import DashboardReporter
 from WMCore.WMConnectionBase import WMConnectionBase
 
 CMSSTEP = re.compile(r'^cmsRun[0-9]+$')
+
+def discardConflictingDocument(couchDbInstance, data, result):
+    """
+    _discardConflictingDocument_
+
+    This should be passed to the queue and commit calls of CMSCouch
+    in order to tell it what to do with conflicting documents.
+    In this case we trash the old one and replace with what we were
+    trying to commit, this is available in the data argument.
+    And the result tells us the id of the conflicting document
+    """
+
+    conflictingId = result["id"]
+
+    try:
+        if not couchDbInstance.documentExists(conflictingId):
+            # It doesn't exist, this is odd
+            # Don't try again
+            return result
+
+        # Get the revision to override
+        originalDocRev = couchDbInstance.document(conflictingId)["_rev"]
+
+        # Look for the data to be commited
+        retval = result
+        for doc in data["docs"]:
+            if doc["_id"] == conflictingId:
+                doc["_rev"] = originalDocRev
+                retval = couchDbInstance.commitOne(doc)
+                break
+
+        return retval
+    except CouchError, ex:
+        logging.error("Couldn't resolve conflict when updating document with id %s" % result["id"])
+        logging.error("Error: %s" % str(ex))
+        return result
+
 
 class ChangeState(WMObject, WMConnectionBase):
     """
@@ -35,13 +71,13 @@ class ChangeState(WMObject, WMConnectionBase):
 
         try:
             self.couchdb = CouchServer(self.config.JobStateMachine.couchurl)
-            self.jobsdatabase = self.couchdb.connectDatabase("%s/jobs" % self.dbname)
-            self.fwjrdatabase = self.couchdb.connectDatabase("%s/fwjrs" % self.dbname)
-            self.jsumdatabase = self.couchdb.connectDatabase( getattr(self.config.JobStateMachine, 'jobSummaryDBName') )
+            self.jobsdatabase = self.couchdb.connectDatabase("%s/jobs" % self.dbname, size = 250)
+            self.fwjrdatabase = self.couchdb.connectDatabase("%s/fwjrs" % self.dbname, size = 250)
+            self.jsumdatabase = self.couchdb.connectDatabase( getattr(self.config.JobStateMachine, 'jobSummaryDBName'), size = 250 )
         except Exception, ex:
             logging.error("Error connecting to couch: %s" % str(ex))
             self.jobsdatabase = None
-            self.fwjrdatabase = None            
+            self.fwjrdatabase = None
             self.jsumdatabase = None
 
         try:
@@ -185,7 +221,7 @@ class ChangeState(WMObject, WMConnectionBase):
 
                 couchRecordsToUpdate.append({"jobid": job["id"],
                                              "couchid": jobDocument["_id"]})
-                self.jobsdatabase.queue(jobDocument)
+                self.jobsdatabase.queue(jobDocument, callback = discardConflictingDocument)
             else:
                 # We send a PUT request to the stateTransition update handler.
                 # Couch expects the parameters to be passed as arguments to in
@@ -208,6 +244,14 @@ class ChangeState(WMObject, WMConnectionBase):
                 updateUri += "?newstate=%s&timestamp=%s" % (newstate, timestamp)
                 self.jsumdatabase.makeRequest(uri = updateUri, type = "PUT", decode = False)
                 logging.debug("Updated job summary status for job %s" % jobSummaryId)
+                
+                updateUri = "/" + self.jsumdatabase.name + "/_design/WMStats/_update/jobStateTransition/" + jobSummaryId
+                updateUri += "?oldstate=%s&newstate=%s&location=%s&timestamp=%s" % (oldstate,
+                                                                                    newstate,
+                                                                                    job["location"],
+                                                                                    timestamp)
+                self.jsumdatabase.makeRequest(uri = updateUri, type = "PUT", decode = False)
+                logging.debug("Updated job summary state history for job %s" % jobSummaryId)
 
             if job.get("fwjr", None):
 
@@ -229,7 +273,7 @@ class ChangeState(WMObject, WMConnectionBase):
                                 "retrycount": job["retry_count"],
                                 "fwjr": job["fwjr"].__to_json__(None),
                                 "type": "fwjr"}
-                self.fwjrdatabase.queue(fwjrDocument, timestamp = True)
+                self.fwjrdatabase.queue(fwjrDocument, timestamp = True, callback = discardConflictingDocument)
 
                 jobSummaryId = job["name"]
                 # building a summary of fwjr
@@ -245,33 +289,46 @@ class ChangeState(WMObject, WMConnectionBase):
 
                 outputs = []
                 outputDataset = None
-                for singlestep in job["fwjr"].listSteps(): 
-                    for singlefile in job["fwjr"].getAllFilesFromStep(step=singlestep): 
-                        if singlefile: 
-                            outputs.append({'type': 'output' if CMSSTEP.match(singlestep) else singlefile.get('module_label', None), 
-                                            'lfn': singlefile.get('lfn', None), 
-                                            'location': list(singlefile.get('locations', set([]))) if len(singlefile.get('locations', set([]))) > 1 
-                                                                                                   else singlefile['locations'].pop(), 
-                                            'checksums': singlefile.get('checksums', {}), 
-                                            'size': singlefile.get('size', None) }) 
+                for singlestep in job["fwjr"].listSteps():
+                    for singlefile in job["fwjr"].getAllFilesFromStep(step=singlestep):
+                        if singlefile:
+                            outputs.append({'type': 'output' if CMSSTEP.match(singlestep) else singlefile.get('module_label', None),
+                                            'lfn': singlefile.get('lfn', None),
+                                            'location': list(singlefile.get('locations', set([]))) if len(singlefile.get('locations', set([]))) > 1
+                                                                                                   else singlefile['locations'].pop(),
+                                            'checksums': singlefile.get('checksums', {}),
+                                            'size': singlefile.get('size', None) })
                             #it should have one output dataset for all the files
-                            outputDataset = singlefile.get('dataset', None) if not outputDataset else outputDataset 
-
+                            outputDataset = singlefile.get('dataset', None) if not outputDataset else outputDataset
+                inputFiles = []
+                for inputFileStruct in job["fwjr"].getAllInputFiles():
+                    # check if inputFileSummary needs to be extended
+                    inputFileSummary = {}
+                    inputFileSummary["lfn"] = inputFileStruct["lfn"]
+                    inputFileSummary["input_type"] = inputFileStruct["input_type"]
+                    inputFiles.append(inputFileSummary)
+                    
                 jobSummary = {"_id": jobSummaryId,
+                              "wmbsid": job["id"],
                               "type": "jobsummary",
                               "retrycount": job["retry_count"],
                               "workflow": job["workflow"],
                               "task": job["task"],
+                              "jobtype": job["jobType"],
                               "state": newstate,
-                              "site": job["fwjr"].getSiteName(),
+                              "site": job.get("location", None),
+                              "cms_location": job["fwjr"].getSiteName(),
                               "exitcode": job["fwjr"].getExitCode(),
                               "errors": errmsgs,
                               "lumis": inputs,
                               "outputdataset": outputDataset,
+                              "inputfiles": inputFiles,
                               "output": outputs }
                 if couchDocID is not None:
                     try:
-                        jobSummary['_rev'] = self.jsumdatabase.document(id = jobSummaryId)['_rev']
+                        currentJobDoc = self.jsumdatabase.document(id = jobSummaryId)
+                        jobSummary['_rev'] = currentJobDoc['_rev']
+                        jobSummary['state_history'] = currentJobDoc.get('state_history', [])
                     except CouchNotFoundError:
                         pass
                 self.jsumdatabase.queue(jobSummary, timestamp = True)
@@ -281,8 +338,8 @@ class ChangeState(WMObject, WMConnectionBase):
                                      conn = self.getDBConn(),
                                      transaction = self.existingTransaction())
 
-        self.jobsdatabase.commit()
-        self.fwjrdatabase.commit()
+        self.jobsdatabase.commit(callback = discardConflictingDocument)
+        self.fwjrdatabase.commit(callback = discardConflictingDocument)
         self.jsumdatabase.commit()
         return
 
@@ -369,7 +426,8 @@ class ChangeState(WMObject, WMConnectionBase):
         for idx, job in enumerate(jobs):
             if job["couch_record"] == None:
                 jobIDsToCheck.append(job["id"])
-            if job.get("task", None) == None or job.get("workflow", None) == None:
+            if job.get("task", None) == None or job.get("workflow", None) == None \
+                or job.get("taskType", None) == None or job.get("jobType", None) == None:
                 jobTasksToCheck.append(job["id"])
             jobMap[job["id"]] = idx
 
@@ -389,16 +447,10 @@ class ChangeState(WMObject, WMConnectionBase):
                 jobs[idx]["task"] = jobTask["task"]
                 jobs[idx]["workflow"] = jobTask["name"]
                 jobs[idx]["taskType"] = jobTask["type"]
+                jobs[idx]["jobType"]  = jobTask["subtype"]
 
     def completeCreatedJobsInformation(self, jobs, incrementRetry = False):
-        jobIDsToCheck = []
-        jobMap = {}
-        for idx, job in enumerate(jobs):
-            #Check if the job already has a jobType defined, which is likely
-            #only if it comes from the JobCreator component
-            if "jobType" not in job:
-                jobIDsToCheck.append(job["id"])
-                jobMap[job["id"]] = idx
+        for job in jobs:
             #It there's no jobID in the mask then it's not loaded
             if "jobID" not in job["mask"]:
                 #Make sure the daofactory was not stripped
@@ -407,18 +459,8 @@ class ChangeState(WMObject, WMConnectionBase):
             #If the mask is event based, then we have info to report
             if job["mask"]["LastEvent"] != None and \
                job["mask"]["FirstEvent"] != None and job["mask"]['inclusivemask']:
-                job["nEventsToProc"] = int(job["mask"]["LastEvent"] - 
+                job["nEventsToProc"] = int(job["mask"]["LastEvent"] -
                                             job["mask"]["FirstEvent"])
             #Increment retry when commanded
             if incrementRetry:
                 job["retry_count"] += 1
-
-        #Let's continue with the jobTypes, get all the types at once and add them
-        #to the jobs
-        if len(jobIDsToCheck) > 0 :
-            jobTypes = self.jobTypeDAO.execute(jobID = jobIDsToCheck,
-                                               conn = self.getDBConn(),
-                                               transaction = self.existingTransaction())
-            for jobType in jobTypes:
-                idx = jobMap[jobType["id"]]
-                jobs[idx]["jobType"] = jobType["type"]

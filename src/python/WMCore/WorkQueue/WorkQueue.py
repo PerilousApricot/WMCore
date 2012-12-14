@@ -48,8 +48,8 @@ def globalQueue(logger = None, dbi = None, **kwargs):
     """
     defaults = {'PopulateFilesets' : False,
                 'LocalQueueFlag': False,
-                'SplittingMapping' : {'DatasetBlock' : 
-                                        {'name': 'Dataset', 
+                'SplittingMapping' : {'DatasetBlock' :
+                                        {'name': 'Dataset',
                                          'args': {}}
                                       },
                 }
@@ -129,7 +129,7 @@ class WorkQueue(WorkQueueBase):
         self.params.setdefault('WMBSUrl', None) # this will only be set on local Queue
         if self.params.get('WMBSUrl'):
             self.params['WMBSUrl'] = Lexicon.sanitizeURL(self.params['WMBSUrl'])['url']
-        self.params.setdefault('Teams', [''])
+        self.params.setdefault('Teams', [])
         self.params.setdefault('DrainMode', False)
         if self.params.get('CacheDir'):
             try:
@@ -160,7 +160,7 @@ class WorkQueue(WorkQueueBase):
                                                    {'name': 'ResubmitBlock',
                                                     'args': {}}
                                                   )
-        
+
         self.params.setdefault('EndPolicySettings', {})
 
         assert(self.params['TrackLocationOrSubscription'] in ('subscription',
@@ -288,7 +288,7 @@ class WorkQueue(WorkQueueBase):
                                            ChildQueueUrl = None, WMBSUrl = None)
 
     def getWork(self, siteJobs):
-        """ 
+        """
         Get available work from the queue, inject into wmbs & mark as running
 
         siteJob is dict format of {site: estimateJobSlot}
@@ -353,6 +353,15 @@ class WorkQueue(WorkQueueBase):
                 dbsBlockDict = dbs.getFileBlockWithParents(blockName)
             else:
                 dbsBlockDict = dbs.getFileBlock(blockName)
+
+            if wmspec.locationDataSourceFlag():
+                blockInfo = dbsBlockDict[blockName]
+                seElements = []
+                for cmsSite in match['Inputs'].values()[0]: #TODO: Allow more than one
+                    ses = self.SiteDB.cmsNametoSE(cmsSite)
+                    seElements.extend(ses)
+                seElements = list(set(seElements))
+                blockInfo['StorageElements'] = seElements
         return blockName, dbsBlockDict[blockName]
 
     def _wmbsPreparation(self, match, wmspec, blockName, dbsBlock):
@@ -380,6 +389,8 @@ class WorkQueue(WorkQueueBase):
     def addNewFilesToOpenSubscriptions(self, *elements):
         """Inject new files to wmbs for running elements that have new files.
             Assumes elements are from the same workflow"""
+        if not self.params['LocalQueueFlag']:
+            return
         wmspec = None
         for ele in elements:
             if not ele.isRunning() or not ele['SubscriptionId'] or not ele:
@@ -397,6 +408,7 @@ class WorkQueue(WorkQueueBase):
                 self.backend.updateElements(ele.id, NumOfFilesAdded = ele['NumOfFilesAdded'])
             if dbsBlock['IsOpen'] != ele['OpenForNewData']:
                 self.logger.info("Closing open block %s (%s)" % (blockName, ele.id))
+                self.backend.updateInboxElements(ele['ParentQueueId'], OpenForNewData = dbsBlock['IsOpen'])
                 self.backend.updateElements(ele.id, OpenForNewData = dbsBlock['IsOpen'])
                 ele['OpenForNewData'] = dbsBlock['IsOpen']
 
@@ -454,9 +466,11 @@ class WorkQueue(WorkQueueBase):
                                      self.params["BossAirConfig"])
                     except Exception, ex:
                         self.logger.error('Aborting %s wmbs subscription failed: %s' % (workflow, str(ex)))
-            self.backend.updateInboxElements(*[x.id for x in inbox_elements if x['Status'] != 'Canceled'], Status = 'Canceled')
+            # Don't update as fails sometimes due to conflicts (#3856)
+            [x.load().__setitem__('Status', 'Canceled') for x in inbox_elements if x['Status'] != 'Canceled']
+            updated_inbox_ids = [x.id for x in self.backend.saveElements(*inbox_elements)]
             # delete elements - no longer need them
-            self.backend.deleteElements(*elements)
+            self.backend.deleteElements(*[x for x in elements if x['ParentQueueId'] in updated_inbox_ids])
 
         # if global queue, update non-acquired to Canceled, update parent to CancelRequested
         else:
@@ -469,14 +483,19 @@ class WorkQueue(WorkQueueBase):
                 self.logger.info("""Canceling work for workflow(s): %s""" % (requestNames))
                 self.logger.info("Canceling element(s) %s" % str([x.id for x in elements]))
             self.backend.updateElements(*[x.id for x in elements_to_cancel], Status = 'Canceled')
-            self.backend.updateElements(*[x.id for x in elements_not_requested], Status = 'CancelRequested')
             self.backend.updateInboxElements(*[x.id for x in inbox_elements if x['Status'] != 'CancelRequested' and not x.inEndState()], Status = 'CancelRequested')
             # if we haven't had any updates for a while assume agent is dead and move to canceled
             if self.params.get('cancelGraceTime', -1) > 0 and elements:
                 last_update = max([float(x.updatetime) for x in elements])
                 if (time.time() - last_update) > self.params['cancelGraceTime']:
                     self.logger.info("%s cancelation has stalled, mark as finished" % elements[0]['RequestName'])
-                    self.backend.updateElements(*[x.id for x in elements if not x.inEndState()], Status = 'Canceled')
+                    # Don't update as fails sometimes due to conflicts (#3856)
+                    [x.load().__setitem__('Status', 'Canceled') for x in elements if not x.inEndState()]
+                    self.backend.saveElements(*[x for x in elements if not x.inEndState()])
+            else:
+                # Don't update as fails sometimes due to conflicts (#3856)
+                [x.load().__setitem__('Status', 'CancelRequested') for x in elements_not_requested]
+                self.backend.saveElements(*elements_not_requested)
 
         return [x.id for x in elements]
 
@@ -711,7 +730,7 @@ class WorkQueue(WorkQueueBase):
 
                     parent = result['ParentQueueElement']
                     if parent.modified:
-                        self.backend.updateInboxElements(parent.id, **parent.statusMetrics())
+                        self.backend.saveElements(parent)
 
                     if result.inEndState():
                         if elements:
@@ -823,7 +842,8 @@ class WorkQueue(WorkQueueBase):
                     raise
             except Exception, ex:
                 # if request has been failing for too long permanently fail it.
-                if (float(inbound.timestamp) + self.params['QueueRetryTime']) < time.time():
+                # last update time was when element was assigned to this queue
+                if (float(inbound.updatetime) + self.params['QueueRetryTime']) < time.time():
                     self.logger.info('Failing workflow "%s" as not queued in %d secs: %s' % (inbound['RequestName'],
                                                                                              self.params['QueueRetryTime'],
                                                                                              str(ex)))

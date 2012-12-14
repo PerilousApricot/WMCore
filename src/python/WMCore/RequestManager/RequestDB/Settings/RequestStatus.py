@@ -15,7 +15,6 @@ StatusList = [
     "test-failed",
     "assignment-approved",
     "assigned",
-    "ops-hold",
     "negotiating",
     "acquired",
     "running",
@@ -35,11 +34,10 @@ NextStatus = {
  "tested" : ["tested", "assignment-approved","failed", "rejected", "aborted"],
  "test-failed" : ["test-failed", "testing-approved", "rejected", "aborted"],
  "assignment-approved" : ["assignment-approved", "assigned", "rejected", "aborted"],
- "assigned" : ["ops-hold", "assigned", "negotiating", "acquired", "aborted", "rejected", "failed"],
- "ops-hold" : ["assigned", "failed", "aborted"],
+ "assigned" : ["assigned", "negotiating", "acquired", "aborted", "rejected", "failed"],
  "negotiating" : ["acquired", "assigned", "rejected", "aborted", "failed", "negotiating"],
  "acquired" : ["running", "failed", "completed", "acquired", "aborted"],
- "running" : ["running", "completed", "aborted", "failed", "epic-FAILED"], 
+ "running" : ["running", "completed", "aborted", "failed", "epic-FAILED"],
  "failed" : ["failed", "testing-approved", "assigned"],
  "epic-FAILED" : ["epic-FAILED"],
  "completed" : ["completed", "closed-out"],
@@ -48,4 +46,3 @@ NextStatus = {
  "aborted" : ["aborted", "testing-approved", "assigned", "rejected", "failed"],
  "rejected" : ["rejected"]
 }
-

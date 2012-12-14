@@ -26,18 +26,18 @@ class ResubmissionWorkloadFactory(StdBase):
         originalRequest = GetRequest.getRequestByName(requestName)
         helper = loadWorkload(originalRequest)
         helper.truncate(arguments["RequestName"], arguments["InitialTaskPath"],
-                        arguments["ACDCServer"], arguments["ACDCDatabase"])
+                        arguments["ACDCServer"], arguments["ACDCDatabase"],
+                        arguments.get("CollectionName"))
+        helper.ignoreOutputModules(arguments.get("IgnoredOutputModules", []))
         return helper
-
 
     def validateSchema(self, schema):
         """
         _validateSchema_
-        
+
         It's an ACDC workflow, it needs ACDC data
         """
         requiredFields = ["OriginalRequestName", "InitialTaskPath",
                           "ACDCServer", "ACDCDatabase"]
         self.requireValidateFields(fields = requiredFields, schema = schema,
                                    validate = False)
-        

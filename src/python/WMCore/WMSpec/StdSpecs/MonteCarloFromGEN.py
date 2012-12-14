@@ -14,7 +14,7 @@ def getTestArguments():
     _getTestArguments_
 
     This should be where the default REQUIRED arguments go
-    This serves as documentation for what is currently required 
+    This serves as documentation for what is currently required
     by the standard MonteCarloFromGEN workload in importable format.
 
     NOTE: These are test values.  If used in real workflows they
@@ -30,16 +30,21 @@ def getTestArguments():
         "ProcessingVersion": 2,
         "SkimInput": "output",
         "GlobalTag": "GR10_P_v4::All",
-        
+
         "CouchURL": os.environ.get("COUCHURL", None),
         "CouchDBName": "scf_wmagent_configcache",
-        
-        "ProcConfigCacheID": "03da10e20c7b98c79f9d6a5c8900f83b",
+        "ConfigCacheID": "03da10e20c7b98c79f9d6a5c8900f83b",
+        # or alternatively CouchURL part can be replaced by ConfigCacheUrl,
+        # then ConfigCacheUrl + CouchDBName + ConfigCacheID
+        "ConfigCacheUrl": None,
+
         "DashboardHost" : "127.0.0.1",
         "DashboardPort" : 8884,
         }
 
     return arguments
+
+
 
 class MonteCarloFromGENWorkloadFactory(StdBase):
     """
@@ -49,7 +54,7 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
     """
     def __init__(self):
         StdBase.__init__(self)
-        return
+
 
     def buildWorkload(self):
         """
@@ -73,7 +78,8 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
 
         outputMods = self.setupProcessingTask(procTask, "Processing", self.inputDataset,
                                               couchURL = self.couchURL, couchDBName = self.couchDBName,
-                                              configDoc = self.procConfigCacheID, splitAlgo = self.procJobSplitAlgo,
+                                              configCacheUrl = self.configCacheUrl,
+                                              configDoc = self.configCacheID, splitAlgo = self.procJobSplitAlgo,
                                               splitArgs = self.procJobSplitArgs, stepType = "CMSSW",
                                               primarySubType = "Production",
                                               userSandbox = self.userSandbox, userFiles = self.userFiles)
@@ -87,6 +93,7 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
             procMergeTasks[outputModuleName] = mergeTask
 
         return workload
+    
 
     def __call__(self, workloadName, arguments):
         """
@@ -105,6 +112,7 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
         # by the ReqMgr or whatever is creating this workflow.
         self.couchURL = arguments["CouchURL"]
         self.couchDBName = arguments["CouchDBName"]
+        self.configCacheUrl = arguments.get("ConfigCacheUrl", None)
 
         # Optional arguments that default to something reasonable.
         self.dbsUrl = arguments.get("DbsUrl", "http://cmsdbsprod.cern.ch/cms_dbs_prod_global/servlet/DBSServlet")
@@ -114,36 +122,37 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
         self.runWhitelist = arguments.get("RunWhitelist", [])
         self.emulation = arguments.get("Emulation", False)
 
-        self.procConfigCacheID = arguments.get("ProcConfigCacheID")
+        self.configCacheID = arguments.get("ConfigCacheID")
 
         # These are mostly place holders because the job splitting algo and
         # parameters will be updated after the workflow has been created.
         self.procJobSplitAlgo  = arguments.get("StdJobSplitAlgo", "LumiBased")
         self.procJobSplitArgs  = arguments.get("StdJobSplitArgs", {"lumis_per_job": 1})
         return self.buildWorkload()
+    
 
     def validateSchema(self, schema):
         """
         _validateSchema_
-        
+
         Check for required fields, and some skim facts
         """
         arguments = getTestArguments()
-        requiredFields = ["CMSSWVersion", "ProcConfigCacheID",
+        requiredFields = ["CMSSWVersion", "ConfigCacheID",
                           "GlobalTag", "InputDataset", "CouchURL",
                           "CouchDBName", "ScramArch"]
         self.requireValidateFields(fields = requiredFields, schema = schema,
                                    validate = False)
-        outMod = self.validateConfigCacheExists(configID = schema["ProcConfigCacheID"],
-                                                couchURL = schema["CouchURL"],
+        couchUrl = schema.get("ConfigCacheUrl", None) or schema["CouchURL"]
+        outMod = self.validateConfigCacheExists(configID = schema["ConfigCacheID"],
+                                                couchURL = couchUrl,
                                                 couchDBName = schema["CouchDBName"],
                                                 getOutputModules = True)
 
         if schema.get("StdJobSplitAlgo", "LumiBased") == "LumiBased":
             if not schema.get("StdJobSplitArgs", {"lumis_per_job": 1}).get("lumis_per_job", 0) > 0:
                 self.raiseValidationException(msg = "Invalid number of lumis_per_job for MCFromGEN")
-                
-        return
+
 
 
 def monteCarloFromGENWorkload(workloadName, arguments):

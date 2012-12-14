@@ -140,7 +140,7 @@ def associateSoftware(requestName, softwareName):
     Software must be registered in the DB
 
     """
-
+    
     factory = DBConnect.getConnection()
     requestId = factory(classname = "Request.ID")
 
@@ -194,5 +194,3 @@ def updateRequestSize(requestName, reqEventsSize, reqFilesSize = None, reqSizeOf
     updateSize.execute(reqId, reqEventsSize, reqFilesSize, reqSizeOfEvent)
 
     return
-
-

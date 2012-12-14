@@ -15,7 +15,7 @@ def getTestArguments():
     _getTestArguments_
 
     This should be where the default REQUIRED arguments go
-    This serves as documentation for what is currently required 
+    This serves as documentation for what is currently required
     by the standard DataProcessing workload in importable format.
 
     NOTE: These are test values.  If used in real workflows they
@@ -38,11 +38,14 @@ def getTestArguments():
         "StepThreeConfigCacheID": "3a4548750b61f485d42b4aa850ba4ab7",
         "KeepStepOneOutput": True,
         "KeepStepTwoOutput": True,
-        
+
         "CouchURL": os.environ.get("COUCHURL", None),
         "CouchDBName": "wmagent_configcachescf",
-        "PileupConfig": {"mc": "/some/cosmics/dataset"},
-
+        # or alternatively CouchURL part can be replaced by ConfigCacheUrl,
+        # then ConfigCacheUrl + CouchDBName + ConfigCacheID
+        "ConfigCacheUrl": None,        
+        "PileupConfig": {"mc": "/some/cosmics/dataset"},        
+        
         "DashboardHost": "127.0.0.1",
         "DashboardPort": 8884,
         }
@@ -86,19 +89,22 @@ class ReDigiWorkloadFactory(StdBase):
                                               inputModule = "Merged", couchURL = self.couchURL,
                                               couchDBName = self.couchDBName,
                                               configDoc = configCacheID,
+                                              configCacheUrl = self.configCacheUrl,
                                               splitAlgo = self.procJobSplitAlgo,
                                               splitArgs = self.procJobSplitArgs, stepType = "CMSSW")
         self.addLogCollectTask(newTask, taskName = taskName + "LogCollect")
         mergeTasks = self.addMergeTasks(newTask, "cmsRun1", outputMods)
         return mergeTasks
-    
+
     def setupThreeStepChainedProcessing(self, stepOneTask):
         """
         _setupThreeStepChainedProcessing_
 
         Modify the step one task to include two more CMSSW steps and chain the
         output between all three steps.
+        
         """
+        configCacheUrl = self.configCacheUrl or self.couchURL
         parentCmsswStep = stepOneTask.getStep("cmsRun1")
         parentCmsswStepHelper = parentCmsswStep.getTypeHelper()
         parentCmsswStepHelper.keepOutput(False)
@@ -113,7 +119,8 @@ class ReDigiWorkloadFactory(StdBase):
         stepTwoCmsswHelper.setupChainedProcessing("cmsRun1", self.stepOneOutputModuleName)
         stepTwoCmsswHelper.cmsswSetup(self.frameworkVersion, softwareEnvironment = "",
                                       scramArch = self.scramArch)
-        stepTwoCmsswHelper.setConfigCache(self.couchURL, self.stepTwoConfigCacheID,
+        
+        stepTwoCmsswHelper.setConfigCache(configCacheUrl, self.stepTwoConfigCacheID,
                                           self.couchDBName)
         stepTwoCmsswHelper.keepOutput(False)
 
@@ -125,11 +132,11 @@ class ReDigiWorkloadFactory(StdBase):
         stepThreeCmsswHelper.setupChainedProcessing("cmsRun2", self.stepTwoOutputModuleName)
         stepThreeCmsswHelper.cmsswSetup(self.frameworkVersion, softwareEnvironment = "",
                                       scramArch = self.scramArch)
-        stepThreeCmsswHelper.setConfigCache(self.couchURL, self.stepThreeConfigCacheID,
+        stepThreeCmsswHelper.setConfigCache(configCacheUrl, self.stepThreeConfigCacheID,
                                           self.couchDBName)
 
         configOutput = self.determineOutputModules(None, None, self.stepTwoConfigCacheID,
-                                                   self.couchURL, self.couchDBName)
+                                                   configCacheUrl, self.couchDBName)
         for outputModuleName in configOutput.keys():
             outputModule = self.addOutputModule(stepOneTask,
                                                 outputModuleName,
@@ -139,7 +146,7 @@ class ReDigiWorkloadFactory(StdBase):
                                                 stepName = "cmsRun2")
 
         configOutput = self.determineOutputModules(None, None, self.stepThreeConfigCacheID,
-                                                   self.couchURL, self.couchDBName)
+                                                   configCacheUrl, self.couchDBName)
         outputMods = {}
         for outputModuleName in configOutput.keys():
             outputModule = self.addOutputModule(stepOneTask,
@@ -163,7 +170,7 @@ class ReDigiWorkloadFactory(StdBase):
 
         if self.stepTwoConfigCacheID == None or self.stepTwoConfigCacheID == "":
             return
-        
+
         stepOneMergeTask = stepOneMergeTasks[self.stepOneOutputModuleName]
         stepTwoMergeTasks = self.addDependentProcTask("StepTwoProc",
                                                       stepOneMergeTask,
@@ -183,7 +190,9 @@ class ReDigiWorkloadFactory(StdBase):
 
         Modify the step one task to include a second chained CMSSW step to
         do RECO on the RAW.
+        
         """
+        configCacheUrl = self.configCacheUrl or self.couchURL
         parentCmsswStep = stepOneTask.getStep("cmsRun1")
         parentCmsswStepHelper = parentCmsswStep.getTypeHelper()
         parentCmsswStepHelper.keepOutput(False)
@@ -198,10 +207,10 @@ class ReDigiWorkloadFactory(StdBase):
         stepTwoCmsswHelper.setupChainedProcessing("cmsRun1", self.stepOneOutputModuleName)
         stepTwoCmsswHelper.cmsswSetup(self.frameworkVersion, softwareEnvironment = "",
                                       scramArch = self.scramArch)
-        stepTwoCmsswHelper.setConfigCache(self.couchURL, self.stepTwoConfigCacheID,
+        stepTwoCmsswHelper.setConfigCache(configCacheUrl, self.stepTwoConfigCacheID,
                                           self.couchDBName)
         configOutput = self.determineOutputModules(None, None, self.stepTwoConfigCacheID,
-                                                   self.couchURL, self.couchDBName)
+                                                   configCacheUrl, self.couchDBName)
         outputMods = {}
         for outputModuleName in configOutput.keys():
             outputModule = self.addOutputModule(stepOneTask,
@@ -219,9 +228,9 @@ class ReDigiWorkloadFactory(StdBase):
 
         mergeTask = mergeTasks[self.stepTwoOutputModuleName]
         self.addDependentProcTask("StepThreeProc", mergeTask,
-                                  self.stepThreeConfigCacheID)        
+                                  self.stepThreeConfigCacheID)
         return
-        
+
     def buildWorkload(self):
         """
         _buildWorkload_
@@ -233,7 +242,7 @@ class ReDigiWorkloadFactory(StdBase):
         """
         (self.inputPrimaryDataset, self.inputProcessedDataset,
          self.inputDataTier) = self.inputDataset[1:].split("/")
-        
+
         workload = self.createWorkload()
         workload.setDashboardActivity("redigi")
         self.reportWorkflowToDashboard(workload.getDashboardActivity())
@@ -242,6 +251,7 @@ class ReDigiWorkloadFactory(StdBase):
 
         outputMods = self.setupProcessingTask(stepOneTask, "Processing", self.inputDataset,
                                               couchURL = self.couchURL, couchDBName = self.couchDBName,
+                                              configCacheUrl = self.configCacheUrl,
                                               configDoc = self.stepOneConfigCacheID,
                                               splitAlgo = self.procJobSplitAlgo,
                                               splitArgs = self.procJobSplitArgs, stepType = "CMSSW")
@@ -281,7 +291,8 @@ class ReDigiWorkloadFactory(StdBase):
         # The CouchURL and name of the ConfigCache database must be passed in
         # by the ReqMgr or whatever is creating this workflow.
         self.couchURL = arguments["CouchURL"]
-        self.couchDBName = arguments["CouchDBName"]        
+        self.couchDBName = arguments["CouchDBName"]
+        self.configCacheUrl = arguments.get("ConfigCacheUrl", None)
 
         # Pull down the configs and the names of the output modules so that
         # we can chain things together properly.
@@ -291,7 +302,7 @@ class ReDigiWorkloadFactory(StdBase):
         self.stepTwoConfigCacheID = arguments.get("StepTwoConfigCacheID", None)
         self.stepThreeConfigCacheID = arguments.get("StepThreeConfigCacheID")
         self.keepStepOneOutput = arguments.get("KeepStepOneOutput", True)
-        self.keepStepTwoOutput = arguments.get("KeepStepTwoOutput", True)        
+        self.keepStepTwoOutput = arguments.get("KeepStepTwoOutput", True)
 
         # Pileup configuration for the first generation task
         self.pileupConfig = arguments.get("PileupConfig", None)
@@ -314,7 +325,7 @@ class ReDigiWorkloadFactory(StdBase):
     def validateSchema(self, schema):
         """
         _validateSchema_
-        
+
         Check for required fields, and some skim facts
         """
         requiredFields = ["CMSSWVersion", "ScramArch",
@@ -323,8 +334,9 @@ class ReDigiWorkloadFactory(StdBase):
                           "CouchDBName"]
         self.requireValidateFields(fields = requiredFields, schema = schema,
                                    validate = False)
+        couchUrl = schema.get("ConfigCacheUrl", None) or schema["CouchURL"]
         outMod = self.validateConfigCacheExists(configID = schema["StepOneConfigCacheID"],
-                                                couchURL = schema["CouchURL"],
+                                                couchURL = couchUrl,
                                                 couchDBName = schema["CouchDBName"],
                                                 getOutputModules = True)
         return
@@ -338,6 +350,3 @@ def reDigiWorkload(workloadName, arguments):
     """
     myReDigiFactory = ReDigiWorkloadFactory()
     return myReDigiFactory(workloadName, arguments)
-
-
-

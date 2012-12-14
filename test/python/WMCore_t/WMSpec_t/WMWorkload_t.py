@@ -29,6 +29,98 @@ class WMWorkloadTest(unittest.TestCase):
             os.remove(self.persistFile)
         return
 
+    def makeTestWorkload(self):
+        """
+        _makeTestWorkload_
+
+        Make a semi-generic workload which can cover the needs of
+        a few tests
+
+        Returns the workload and all the cmssw helpers
+        """
+        testWorkload = WMWorkloadHelper(WMWorkload("TestWorkload"))
+
+        procTask = testWorkload.newTask("ProcessingTask")
+        procTask.setTaskType("Processing")
+        procTaskCMSSW = procTask.makeStep("cmsRun1")
+        procTaskCMSSW.setStepType("CMSSW")
+        procTaskCMSSWHelper = procTaskCMSSW.getTypeHelper()
+        procTaskCMSSW2 = procTaskCMSSW.addStep("cmsRun2")
+        procTaskCMSSW2.setStepType("CMSSW")
+        procTaskCMSSW2Helper = procTaskCMSSW2.getTypeHelper()
+        procTask.applyTemplates()
+        procTaskCMSSW2Helper.keepOutput(False)
+
+        primaryDataset = "bogusPrimary"
+        procTaskCMSSWHelper.addOutputModule("OutputA",
+                                            primaryDataset = primaryDataset,
+                                            processedDataset = "bogusProcessed",
+                                            dataTier = "DQM",
+                                            lfnBase = "bogusUnmerged",
+                                            mergedLFNBase = "bogusMerged",
+                                            filterName = None)
+        procTaskCMSSW2Helper.addOutputModule("OutputC",
+                                            primaryDataset = primaryDataset,
+                                            processedDataset = "bogusProcessed",
+                                            dataTier = "DATATIERC",
+                                            lfnBase = "bogusUnmerged",
+                                            mergedLFNBase = "bogusMerged",
+                                            filterName = None)
+        procTaskCMSSWHelper.addOutputModule("OutputB",
+                                            primaryDataset = primaryDataset,
+                                            processedDataset = "bogusProcessed",
+                                            dataTier = "DATATIERB",
+                                            lfnBase = "bogusUnmerged",
+                                            mergedLFNBase = "bogusMerged",
+                                            filterName = None)
+
+        mergeTask = procTask.addTask("MergeTask")
+        mergeTask.setTaskType("Merge")
+        mergeTaskCMSSW = mergeTask.makeStep("cmsRun1")
+        mergeTaskCMSSW.setStepType("CMSSW")
+        mergeTaskCMSSWHelper = mergeTaskCMSSW.getTypeHelper()
+        mergeTask.applyTemplates()
+
+        mergeTaskCMSSWHelper.addOutputModule("Merged",
+                                             primaryDataset = "bogusPrimary",
+                                             processedDataset = "bogusProcessed",
+                                             dataTier = "DQM",
+                                             lfnBase = "bogusMerged",
+                                             mergedLFNBase = "bogusMerged",
+                                             filterName = None)
+
+        skimTask = mergeTask.addTask("SkimTask")
+        skimTask.setTaskType("Skim")
+        skimTaskCMSSW = skimTask.makeStep("cmsRun1")
+        skimTaskCMSSW.setStepType("CMSSW")
+        skimTaskCMSSWHelper = skimTaskCMSSW.getTypeHelper()
+        skimTask.applyTemplates()
+
+
+
+        skimTaskCMSSWHelper.addOutputModule("SkimA",
+                                            primaryDataset = primaryDataset,
+                                            processedDataset = "bogusProcessed",
+                                            dataTier = "DATATIERC",
+                                            lfnBase = "bogusUnmerged",
+                                            mergedLFNBase = "bogusMerged",
+                                            filterName = "bogusFilter")
+
+        harvestTask = mergeTask.addTask("HarvestTask")
+        harvestTask.setTaskType("Harvesting")
+        harvestTaskCMSSW = harvestTask.makeStep("cmsRun1")
+        harvestTaskCMSSW.setStepType("CMSSW")
+        harvestTaskCMSSWHelper = harvestTaskCMSSW.getTypeHelper()
+        harvestTask.applyTemplates()
+
+        harvestTaskCMSSWHelper.setDataProcessingConfig("pp", "dqmHarvesting",
+                                                       globalTag = "Bogus",
+                                                       datasetName = "/bogusPrimary/bogusProcessed/DQM",
+                                                       runNumber = 0)
+        return (testWorkload, procTaskCMSSWHelper,
+                mergeTaskCMSSWHelper, skimTaskCMSSWHelper,
+                harvestTaskCMSSWHelper)
+
     def testInstantiation(self):
         """
         _testInstantiation_
@@ -143,7 +235,21 @@ class WMWorkloadTest(unittest.TestCase):
 
         return
 
+    def testF_Overrides(self):
+        """
+        _testF_Overrides_
 
+        Check the values attached to the workload general overrides
+        """
+        name = "ASmartString"
+
+        workload = WMWorkloadHelper(WMWorkload("TestWorkload"))
+        workload.setPhEDExInjectionOverride(name)
+
+        self.assertEqual(workload.getPhEDExInjectionOverride(), name)
+        self.assertEqual(workload.getWorkloadOverrides().injectionSite, name)
+
+        return
 
     def testWhiteBlacklists(self):
         """
@@ -376,88 +482,14 @@ class WMWorkloadTest(unittest.TestCase):
         correct.  Also verify that the listOutputDatasets() method works
         correctly.
         """
-        testWorkload = WMWorkloadHelper(WMWorkload("TestWorkload"))
 
-        procTask = testWorkload.newTask("ProcessingTask")
-        procTask.setTaskType("Processing")
-        procTaskCMSSW = procTask.makeStep("cmsRun1")
-        procTaskCMSSW.setStepType("CMSSW")
-        procTaskCMSSWHelper = procTaskCMSSW.getTypeHelper()
-        procTaskCMSSW2 = procTaskCMSSW.addStep("cmsRun2")
-        procTaskCMSSW2.setStepType("CMSSW")
-        procTaskCMSSW2Helper = procTaskCMSSW2.getTypeHelper()
-        procTask.applyTemplates()
-        procTaskCMSSW2Helper.keepOutput(False)
-
-        acquisitionEra = "TestAcqEra"
         primaryDataset = "bogusPrimary"
-        procEra        = "vTest"
+        acquisitionEra = "TestAcqEra"
+        procEra = "vTest"
 
-        procTaskCMSSWHelper.addOutputModule("OutputA",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DQM",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-        procTaskCMSSW2Helper.addOutputModule("OutputC",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERC",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-        procTaskCMSSWHelper.addOutputModule("OutputB",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERB",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-
-        mergeTask = procTask.addTask("MergeTask")
-        mergeTask.setTaskType("Merge")
-        mergeTaskCMSSW = mergeTask.makeStep("cmsRun1")
-        mergeTaskCMSSW.setStepType("CMSSW")
-        mergeTaskCMSSWHelper = mergeTaskCMSSW.getTypeHelper()
-        mergeTask.applyTemplates()
-
-        mergeTaskCMSSWHelper.addOutputModule("Merged",
-                                             primaryDataset = "bogusPrimary",
-                                             processedDataset = "bogusProcessed",
-                                             dataTier = "DQM",
-                                             lfnBase = "bogusMerged",
-                                             mergedLFNBase = "bogusMerged",
-                                             filterName = None)
-
-        skimTask = mergeTask.addTask("SkimTask")
-        skimTask.setTaskType("Skim")
-        skimTaskCMSSW = skimTask.makeStep("cmsRun1")
-        skimTaskCMSSW.setStepType("CMSSW")
-        skimTaskCMSSWHelper = skimTaskCMSSW.getTypeHelper()
-        skimTask.applyTemplates()
-
-
-
-        skimTaskCMSSWHelper.addOutputModule("SkimA",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERC",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = "bogusFilter")
-
-        harvestTask = mergeTask.addTask("HarvestTask")
-        harvestTask.setTaskType("Harvesting")
-        harvestTaskCMSSW = harvestTask.makeStep("cmsRun1")
-        harvestTaskCMSSW.setStepType("CMSSW")
-        harvestTaskCMSSWHelper = harvestTaskCMSSW.getTypeHelper()
-        harvestTask.applyTemplates()
-
-        harvestTaskCMSSWHelper.setDataProcessingConfig("pp", "dqmHarvesting",
-                                                       globalTag = "Bogus",
-                                                       datasetName = "/bogusPrimary/bogusProcessed/DQM",
-                                                       runNumber = 0)
+        (testWorkload, procTaskCMSSWHelper,
+         mergeTaskCMSSWHelper, skimTaskCMSSWHelper,
+         harvestTaskCMSSWHelper) = self.makeTestWorkload()
 
         testWorkload.setAcquisitionEra(acquisitionEra)
 
@@ -605,79 +637,11 @@ class WMWorkloadTest(unittest.TestCase):
         different tasks.
         """
 
-        testWorkload = WMWorkloadHelper(WMWorkload("TestWorkload"))
-
-        procTask = testWorkload.newTask("ProcessingTask")
-        procTask.setTaskType("Processing")
-        procTaskCMSSW = procTask.makeStep("cmsRun1")
-        procTaskCMSSW.setStepType("CMSSW")
-        procTaskCMSSWHelper = procTaskCMSSW.getTypeHelper()
-        procTaskCMSSW2 = procTaskCMSSW.addStep("cmsRun2")
-        procTaskCMSSW2.setStepType("CMSSW")
-        procTaskCMSSW2Helper = procTaskCMSSW2.getTypeHelper()
-        procTask.applyTemplates()
-        procTaskCMSSW2Helper.keepOutput(False)
-
         primaryDataset = "bogusPrimary"
 
-        procTaskCMSSWHelper.addOutputModule("OutputA",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERA",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-        procTaskCMSSW2Helper.addOutputModule("OutputC",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERC",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-        procTaskCMSSWHelper.addOutputModule("OutputB",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERB",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = None)
-
-        mergeTask = procTask.addTask("MergeTask")
-        mergeTask.setTaskType("Merge")
-        mergeTaskCMSSW = mergeTask.makeStep("cmsRun1")
-        mergeTaskCMSSW.setStepType("CMSSW")
-        mergeTaskCMSSWHelper = mergeTaskCMSSW.getTypeHelper()
-        mergeTask.applyTemplates()
-
-        mergeTaskCMSSWHelper.addOutputModule("Merged",
-                                             primaryDataset = "bogusPrimary",
-                                             processedDataset = "bogusProcessed",
-                                             dataTier = "DATATIERA",
-                                             lfnBase = "bogusMerged",
-                                             mergedLFNBase = "bogusMerged",
-                                             filterName = None)
-
-        skimTask = mergeTask.addTask("SkimTask")
-        skimTask.setTaskType("Skim")
-        skimTaskCMSSW = skimTask.makeStep("cmsRun1")
-        skimTaskCMSSW.setStepType("CMSSW")
-        skimTaskCMSSWHelper = skimTaskCMSSW.getTypeHelper()
-        skimTask.applyTemplates()
-
-
-
-        skimTaskCMSSWHelper.addOutputModule("SkimA",
-                                            primaryDataset = primaryDataset,
-                                            processedDataset = "bogusProcessed",
-                                            dataTier = "DATATIERA",
-                                            lfnBase = "bogusUnmerged",
-                                            mergedLFNBase = "bogusMerged",
-                                            filterName = "bogusFilter")
-
-        outputModules = [procTaskCMSSWHelper.getOutputModule("OutputA"),
-                         procTaskCMSSWHelper.getOutputModule("OutputB"),
-                         mergeTaskCMSSWHelper.getOutputModule("Merged"),
-                         skimTaskCMSSWHelper.getOutputModule("SkimA")]
+        (testWorkload, procTaskCMSSWHelper,
+         mergeTaskCMSSWHelper, skimTaskCMSSWHelper,
+         _) = self.makeTestWorkload()
 
         acquisitionEras = {"ProcessingTask" : "TestAcqEra",
                            "SkimTask" : "TestAcqEraSkim"}
@@ -760,7 +724,7 @@ class WMWorkloadTest(unittest.TestCase):
                 self.assertEqual(outputModule.mergedLFNBase, mergedLFN,
                                  "Error: Incorrect merged LFN %s." % outputModule.mergedLFNBase)
 
-        mergedLFNBase   = "/store/temp/merged"
+        mergedLFNBase = "/store/temp/merged"
         unmergedLFNBase = "/store/temp/unmerged"
         testWorkload.setLFNBase(mergedLFNBase, unmergedLFNBase)
 
@@ -805,11 +769,11 @@ class WMWorkloadTest(unittest.TestCase):
         outputDatasets = testWorkload.listOutputDatasets()
         self.assertEqual(len(outputDatasets), 3,
                          "Error: Wrong number of output datasets: %s" % testWorkload.listOutputDatasets())
-        self.assertTrue("/bogusPrimary/TestAcqEra-vTest/DATATIERA" in outputDatasets,
+        self.assertTrue("/bogusPrimary/TestAcqEra-vTest/DQM" in outputDatasets,
                         "Error: A dataset is missing")
         self.assertTrue("/bogusPrimary/TestAcqEra-vTest/DATATIERB" in outputDatasets,
                         "Error: A dataset is missing")
-        self.assertTrue("/bogusPrimary/TestAcqEraSkim-bogusFilter-vTestSkim/DATATIERA" in outputDatasets,
+        self.assertTrue("/bogusPrimary/TestAcqEraSkim-bogusFilter-vTestSkim/DATATIERC" in outputDatasets,
                         "Error: A dataset is missing")
 
         processingVersion = testWorkload.getProcessingVersion()
@@ -820,6 +784,27 @@ class WMWorkloadTest(unittest.TestCase):
         self.assertEqual(acquisitionEra, "TestAcqEra",
                          "Error: Wrong top level acquisition era")
         return
+
+    def testSetSubscriptionInformation(self):
+        """
+        _testSetSubscriptionInformation_
+
+        Verify that we can set and retrieve subscription
+        information on the datasets
+        """
+        testWorkload = self.makeTestWorkload()[0]
+        testWorkload.setSubscriptionInformation(custodialSites = ["CMSSite_1"],
+                                                nonCustodialSites = ["CMSSite_2"])
+        subInformation = testWorkload.getSubscriptionInformation()
+
+        outputDatasets = testWorkload.listOutputDatasets()
+
+        for outputDataset in outputDatasets:
+            datasetSub = subInformation[outputDataset]
+            self.assertEquals(datasetSub["CustodialSites"], ["CMSSite_1"], "Wrong custodial sites for %s" % outputDataset)
+            self.assertEquals(datasetSub["NonCustodialSites"], ["CMSSite_2"], "Wrong non-custodial sites for %s" % outputDataset)
+            self.assertEquals(datasetSub["AutoApproveSites"], [], "Wrong auto-approve sites for %s" % outputDataset)
+            self.assertEquals(datasetSub["Priority"], "Low", "Wrong priority for %s" % outputDataset)
 
     def testUpdatingSplitParameters(self):
         """
@@ -1213,6 +1198,92 @@ class WMWorkloadTest(unittest.TestCase):
                          {"database": "somedatabase", "fileset": "/TestWorkload/ProcessingTask/MergeTask",
                           "collection": "TestWorkload", "server": "somecouchurl"})
 
+        return
+
+    def testIgnoreOutputModules(self):
+        """
+        _testIgnoreOutputModules_
+
+        Checks that we can reduce a workload based on ignore certain
+        output modules and also the affected steps are marked correctly
+        to ignore such modules
+        """
+
+        testWorkload = WMWorkloadHelper(WMWorkload("TestWorkload"))
+        testWorkload.setOwnerDetails("sfoulkes", "DMWM")
+        procTask = testWorkload.newTask("ProcessingTask")
+        procTask.setSplittingAlgorithm("FileBased", files_per_job = 1)
+        procTask.setTaskType("Processing")
+        procTaskCmssw = procTask.makeStep("cmsRun1")
+        procTaskCmssw.setStepType("CMSSW")
+        procTask.applyTemplates()
+        procTaskCmsswHelper = procTaskCmssw.getTypeHelper()
+        procTaskCmsswHelper.addOutputModule("badOutput",
+                                            primaryDataset = "primary",
+                                            processedDataset = "processed",
+                                            dataTier = "tier",
+                                            filterName = "filter",
+                                            lfnBase = "/store/data",
+                                            mergedLFNBase = "/store/unmerged")
+
+        procTaskCmsswHelper.addOutputModule("goodOutput",
+                                            primaryDataset = "primary",
+                                            processedDataset = "processed",
+                                            dataTier = "tier",
+                                            filterName = "filter",
+                                            lfnBase = "/store/data",
+                                            mergedLFNBase = "/store/unmerged")
+
+        procTaskStageOut = procTaskCmssw.addStep("StageOut1")
+        procTaskStageOut.setStepType("StageOut")
+        procTaskStageOut.getTypeHelper().setMinMergeSize(2, 2)
+        procTask.applyTemplates()
+
+        mergeTask = procTask.addTask("MergeTask")
+        mergeTask.setTaskType("Merge")
+        mergeTask.setSplittingAlgorithm("WMBSMergeBySize", max_merge_size = 2,
+                                        max_merge_events = 2, min_merge_size = 2)
+        mergeTaskCmssw = mergeTask.makeStep("cmsRun1")
+        mergeTaskCmssw.setStepType("CMSSW")
+        mergeTask.applyTemplates()
+        mergeTask.setInputReference(procTask, outputModule = "badOutput")
+
+        mergeTask2 = procTask.addTask("MergeTask2")
+        mergeTask2.setTaskType("Merge")
+        mergeTask2.setSplittingAlgorithm("WMBSMergeBySize", max_merge_size = 2,
+                                        max_merge_events = 2, min_merge_size = 2)
+        mergeTask2Cmssw = mergeTask2.makeStep("cmsRun1")
+        mergeTask2Cmssw.setStepType("CMSSW")
+        mergeTask2.applyTemplates()
+        mergeTask2.setInputReference(procTask, outputModule = "goodOutput")
+
+        cleanupTask = procTask.addTask("CleanupTask")
+        cleanupTask.setTaskType("Cleanup")
+        cleanupTask.setSplittingAlgorithm("SiblingProcessingBased", files_per_job = 50)
+        cleanupTaskCmssw = cleanupTask.makeStep("cmsRun1")
+        cleanupTaskCmssw.setStepType("CMSSW")
+        cleanupTask.applyTemplates()
+        cleanupTask.setInputReference(procTask, outputModule = "badOutput")
+
+        skimTask = mergeTask2.addTask("SkimTask")
+        skimTask.setTaskType("Skim")
+        skimTaskCmssw = skimTask.makeStep("cmsRun1")
+        skimTaskCmssw.setStepType("CMSSW")
+        skimTask.setSplittingAlgorithm("FileBased", files_per_job = 1)
+        skimTask.applyTemplates()
+
+        testWorkload.ignoreOutputModules(["badOutput"])
+
+        self.assertFalse(testWorkload.getTaskByPath("/TestWorkload/ProcessingTask/MergeTask"),
+                         "Error: Merge task is available")
+        self.assertFalse(testWorkload.getTaskByPath("/TestWorkload/ProcessingTask/CleanupTask"),
+                         "Error: Cleanup task is available")
+        self.assertTrue(testWorkload.getTaskByPath("/TestWorkload/ProcessingTask/MergeTask2"),
+                         "Error: Second merge task is not available")
+        self.assertTrue(testWorkload.getTaskByPath("/TestWorkload/ProcessingTask/MergeTask2/SkimTask"),
+                         "Error: Skim task is not available")
+
+        self.assertEquals(procTaskCmssw.getIgnoredOutputModules(), ["badOutput"])
         return
 
     def testSetCMSSWParams(self):

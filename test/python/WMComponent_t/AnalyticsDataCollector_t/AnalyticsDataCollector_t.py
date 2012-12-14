@@ -32,7 +32,7 @@ class MockLocalQService():
         for i in range(NUM_REQUESTS + 1):
             status['%s%s' % (REQUEST_NAME_PREFIX, i+1)] = {'inQueue': 1, 'inWMBS': 1}
             inputDataset['%s%s' % (REQUEST_NAME_PREFIX, i+1)] = 'inputdataset-%s' % (i+1)
-        
+
         return {'status': status, 'input_dataset': inputDataset}
 
 class AnalyticsDataCollector_t(unittest.TestCase):
@@ -52,7 +52,9 @@ class AnalyticsDataCollector_t(unittest.TestCase):
         self.testInit = TestInit(__file__)
         self.testInit.setLogging()
         self.reqmonDBName = "wmstat_t"
+        self.localDBName = "wmstat_t_local"
         self.testInit.setupCouch(self.reqmonDBName, "WMStats")
+        self.testInit.setupCouch(self.localDBName, "WMStats")
         self.testDir = self.testInit.generateWorkDir()
         EmulatorHelper.setEmulators(localCouch = True, reqMon = False, wmagentDB = True)
         return
@@ -87,16 +89,27 @@ class AnalyticsDataCollector_t(unittest.TestCase):
         config.Agent.agentName = "testAgentName"
         config.Agent.useMsgService = False
         config.Agent.useTrigger = False
-        config.Agent.useHeartbeat = False 
+        config.Agent.useHeartbeat = False
+
+        config.section_("ACDC")
+        config.ACDC.couchurl = couchURL
+        config.ACDC.database = "acdc"
 
         config.component_("AnalyticsDataCollector")
         config.AnalyticsDataCollector.namespace = "WMComponent.AnalyticsDataCollector.AnalyticsDataCollector"
-        config.AnalyticsDataCollector.componentDir  = config.General.workDir + "/AnalyticsDataCollector"
+        config.AnalyticsDataCollector.componentDir = config.General.workDir + "/AnalyticsDataCollector"
         config.AnalyticsDataCollector.logLevel = "DEBUG"
         config.AnalyticsDataCollector.pollInterval = 240
         config.AnalyticsDataCollector.localCouchURL = "%s/%s" % (couchURL, "jobDump")
         config.AnalyticsDataCollector.localQueueURL = "%s/%s" % (couchURL, "workqueue")
+        config.AnalyticsDataCollector.localWMStatsURL = "%s/%s" % (couchURL, self.localDBName)
+        config.AnalyticsDataCollector.centralWMStatsURL = "%s/%s" % (couchURL, self.reqmonDBName)
         config.AnalyticsDataCollector.reqMonURL = "%s/%s" % (couchURL, self.reqmonDBName)
+        config.AnalyticsDataCollector.summaryLevel = "task"
+
+        config.section_("WMBSService")
+        config.WMBSService.section_("Webtools")
+        config.WMBSService.Webtools.port = 9999
 
         return config
 
@@ -108,7 +121,7 @@ class AnalyticsDataCollector_t(unittest.TestCase):
         myThread = threading.currentThread()
         config = self.getConfig()
         analytics = AnalyticsPoller(config)
-        
+
         analytics.setup(None)
         analytics.localQueue = MockLocalQService()
         analytics.algorithm(None)

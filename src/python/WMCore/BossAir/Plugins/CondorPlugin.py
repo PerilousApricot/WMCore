@@ -196,13 +196,14 @@ class CondorPlugin(BasePlugin):
         self.nProcess = getattr(self.config.BossAir, 'nCondorProcesses', 4)
 
         # Set up my proxy and glexec stuff
-        self.proxy      = None
-        self.serverCert = getattr(config.BossAir, 'delegatedServerCert', None)
-        self.serverKey  = getattr(config.BossAir, 'delegatedServerKey', None)
-        self.myproxySrv = getattr(config.BossAir, 'myproxyServer', None)
-        self.proxyDir   = getattr(config.BossAir, 'proxyDir', '/tmp/')
-        self.serverHash = getattr(config.BossAir, 'delegatedServerHash', None)
-        self.glexecPath = getattr(config.BossAir, 'glexecPath', None)
+        self.setupScript = getattr(config.BossAir, 'UISetupScript', None)
+        self.proxy       = None
+        self.serverCert  = getattr(config.BossAir, 'delegatedServerCert', None)
+        self.serverKey   = getattr(config.BossAir, 'delegatedServerKey', None)
+        self.myproxySrv  = getattr(config.BossAir, 'myproxyServer', None)
+        self.proxyDir    = getattr(config.BossAir, 'proxyDir', '/tmp/')
+        self.serverHash  = getattr(config.BossAir, 'delegatedServerHash', None)
+        self.glexecPath  = getattr(config.BossAir, 'glexecPath', None)
         self.glexecWrapScript = getattr(config.BossAir, 'glexecWrapScript', None)
         self.glexecUnwrapScript = getattr(config.BossAir, 'glexecUnwrapScript', None)
         self.jdlProxyFile    = None # Proxy name to put in JDL (owned by submit user)
@@ -256,6 +257,8 @@ class CondorPlugin(BasePlugin):
         """
 
         args = {}
+        if self.setupScript:
+            args['uisource'] = self.setupScript
         args['server_cert'] = self.serverCert
         args['server_key']  = self.serverKey
         args['myProxySvr']  = self.myproxySrv
@@ -503,7 +506,6 @@ class CondorPlugin(BasePlugin):
                 except:
                     # There's nothing we can really do here
                     pass
-                
 
         # Remove JDL files unless commanded otherwise
         if getattr(self.config.JobSubmitter, 'deleteJDLFiles', True):
@@ -605,14 +607,14 @@ class CondorPlugin(BasePlugin):
                     job['status']      = statName
                     job['status_time'] = 0
 
-               #Check if we have a valid status time
+                #Check if we have a valid status time
                 if not job['status_time']:
                     if job['status'] == 'Running':
-                        job['status_time'] = jobAd.get('runningTime', 0)
+                        job['status_time'] = int(jobAd.get('runningTime', 0))
                     elif job['status'] == 'Idle':
-                        job['status_time'] = jobAd.get('submitTime', 0)
+                        job['status_time'] = int(jobAd.get('submitTime', 0))
                     else:
-                        job['status_time'] = jobAd.get('stateTime', 0)
+                        job['status_time'] = int(jobAd.get('stateTime', 0))
                     changeList.append(job)
 
                 runningList.append(job)
@@ -889,7 +891,7 @@ class CondorPlugin(BasePlugin):
             jdl.append('x509userproxy = %s\n' % job['proxyPath'])
 
         if job.get('requestName', None):
-            jdl.append('+WMAgent_RequestName = %s\n' % job['requestName'])
+            jdl.append('+WMAgent_RequestName = "%s"\n' % job['requestName'])
 
         return jdl
 
@@ -972,4 +974,3 @@ class CondorPlugin(BasePlugin):
 
 
         return jobInfo
-

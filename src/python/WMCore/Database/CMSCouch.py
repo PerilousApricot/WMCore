@@ -184,19 +184,21 @@ class Database(CouchDBRequests):
                     doc[label] = int(time.time())
         return data
 
-    def queue(self, doc, timestamp = False, viewlist=[]):
+    def queue(self, doc, timestamp = False, viewlist=[], callback = None):
         """
         Queue up a doc for bulk insert. If timestamp = True add a timestamp
         field if one doesn't exist. Use this over commit(timestamp=True) if you
         want to timestamp when a document was added to the queue instead of when
         it was committed
+        If a callback is specified then pass it to the commit function if a
+        commit is triggered
         """
         if timestamp:
             self.timestamp(doc, timestamp)
         #TODO: Thread this off so that it's non blocking...
         if len(self._queue) >= self._queue_size:
             print 'queue larger than %s records, committing' % self._queue_size
-            self.commit(viewlist=viewlist)
+            self.commit(viewlist=viewlist, callback = callback)
         self._queue.append(doc)
 
     def queueDelete(self, doc, viewlist=[]):
@@ -225,7 +227,7 @@ class Database(CouchDBRequests):
         return retval
 
     def commit(self, doc=None, returndocs = False, timestamp = False,
-               viewlist=[], **data):
+               viewlist=[], callback = None, **data):
         """
         Add doc and/or the contents of self._queue to the database. If
         returndocs is true, return document objects representing what has been
@@ -233,6 +235,12 @@ class Database(CouchDBRequests):
         timestamp - this will be the timestamp of when the commit was called, it
         will not override an existing timestamp field.  If timestamp is a string
         that string will be used as the label for the timestamp.
+
+        The callback function will be called with the documents that trigger a
+        conflict when doing the bulk post of the documents in the queue,
+        callback functions must accept the database object, the data posted and a row in the
+        result from the bulk commit. The callback updates the retval with
+        its internal retval
 
         key, value pairs can be used to pass extra parameters to the bulk doc api
         See http://wiki.apache.org/couchdb/HTTP_Bulk_Document_API
@@ -259,6 +267,11 @@ class Database(CouchDBRequests):
         for v in viewlist:
             design, view = v.split('/')
             self.loadView(design, view, {'limit': 0})
+        if callback:
+            for idx, result in enumerate(retval):
+                if result.get('error', None) == 'conflict':
+                    retval[idx] = callback(self, data, result)
+
         return retval
 
     def document(self, id, rev = None):
@@ -310,39 +323,39 @@ class Database(CouchDBRequests):
         self.commitOne(doc)
 
     def compact(self, views=[], blocking=False, blocking_poll=5, callback=False):
-       """
-       Compact the database: http://wiki.apache.org/couchdb/Compaction
+        """
+        Compact the database: http://wiki.apache.org/couchdb/Compaction
 
-       If given, views should be a list of design document name (minus the
-       _design/ - e.g. myviews not _design/myviews). For each view in the list
-       view compaction will be triggered. Also, if the views list is provided
-       _view_cleanup is called to remove old view output.
+        If given, views should be a list of design document name (minus the
+        _design/ - e.g. myviews not _design/myviews). For each view in the list
+        view compaction will be triggered. Also, if the views list is provided
+        _view_cleanup is called to remove old view output.
 
-       If True blocking will cause this call to wait until the compaction is
-       completed, polling for status with frequency blocking_poll and calling
-       the function specified by callback on each iteration.
+        If True blocking will cause this call to wait until the compaction is
+        completed, polling for status with frequency blocking_poll and calling
+        the function specified by callback on each iteration.
 
-       The callback function can be used for logging and could also be used to
-       timeout the compaction based on status (e.g. don't time out if compaction
-       is less than X% complete. The callback function takes the Database (self)
-       as an argument. If the callback function raises an exception the block is
-       removed and the compact call returns.
-       """
-       response = self.post('/%s/_compact' % self.name)
-       if len(views) > 0:
-         for view in views:
-           response[view] = self.post('/%s/_compact/%s' % (self.name, view))
-           response['view_cleanup' ] = self.post('/%s/_view_cleanup' % (self.name))
+        The callback function can be used for logging and could also be used to
+        timeout the compaction based on status (e.g. don't time out if compaction
+        is less than X% complete. The callback function takes the Database (self)
+        as an argument. If the callback function raises an exception the block is
+        removed and the compact call returns.
+        """
+        response = self.post('/%s/_compact' % self.name)
+        if len(views) > 0:
+            for view in views:
+                response[view] = self.post('/%s/_compact/%s' % (self.name, view))
+                response['view_cleanup' ] = self.post('/%s/_view_cleanup' % (self.name))
 
-       if blocking:
-         while self.info()['compact_running']:
-           if callback:
-             try:
-               callback(self)
-             except Exception, e:
-               return response
-           time.sleep(blocking_poll)
-       return response
+        if blocking:
+            while self.info()['compact_running']:
+                if callback:
+                    try:
+                        callback(self)
+                    except Exception:
+                        return response
+                time.sleep(blocking_poll)
+        return response
 
     def changes(self, since=-1):
         """
@@ -818,12 +831,12 @@ class CouchServer(CouchDBRequests):
         though, would need to decompose the URL and rebuild it.
         """
         if source not in self.listDatabases():
-          check_server_url(source)
+            check_server_url(source)
         if destination not in self.listDatabases():
-          if create_target and not destination.startswith("http"):
-            check_name(destination)
-          else:
-            check_server_url(destination)
+            if create_target and not destination.startswith("http"):
+                check_name(destination)
+            else:
+                check_server_url(destination)
         data={"source":source,"target":destination}
         #There must be a nicer way to do this, but I've not had coffee yet...
         if continuous: data["continuous"] = continuous

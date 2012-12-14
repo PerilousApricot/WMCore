@@ -36,7 +36,7 @@ class LogArchive(Executor):
 
     Execute a LogArchive Step
 
-    """        
+    """
 
     def pre(self, emulator = None):
         """
@@ -74,18 +74,20 @@ class LogArchive(Executor):
         logging.info("Step is: %s" % self.step)
         # Wait timout for stageOut
         waitTime = overrides.get('waitTime', 3600 + (self.step.retryDelay * self.step.retryCount))
-            
+
         matchFiles = [
             ".log$",
             "FrameworkJobReport",
             "Report.pkl",
             "Report.pcl",
-            "^PSet.py$"
+            "^PSet.py$",
+            "^PSet.pkl$"
             ]
 
         #Okay, we need a stageOut Manager
-        useNewStageOutCode = True
-        if overrides.has_key('newStageOut') and overrides.get('newStageOut'):
+        useNewStageOutCode = False
+        if getattr(self.step, 'newStageout', False) or \
+            (overrides.has_key('newStageOut') and overrides.get('newStageOut')):
             useNewStageOutCode = True
         if not useNewStageOutCode:
             # old style
@@ -159,7 +161,7 @@ class LogArchive(Executor):
             msg += traceback.format_exc()
             logging.error(msg)
             raise WMException("LogArchiveFailure", message = str(ex))
-        
+
         signal.alarm(0)
         return
 
@@ -175,7 +177,7 @@ class LogArchive(Executor):
         #Another emulator check
         if (emulator != None):
             return emulator.emulatePost( self.step )
-        
+
         logging.info("Steps.Executors.StageOut.post called")
         return None
 
@@ -183,7 +185,7 @@ class LogArchive(Executor):
     def findFilesInDirectory(self, dirName, matchFiles):
         """
         _findFilesInDirectory_
-        
+
         Given a directory, it matches the files to the specified patterns
         """
 
@@ -207,7 +209,7 @@ class LogArchive(Executor):
     def getLFN(self, tarName):
         """
         getLFN
-        
+
         LFNs are messy, do the messy stuff here
         """
 

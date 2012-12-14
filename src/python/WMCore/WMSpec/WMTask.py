@@ -44,6 +44,27 @@ def getTaskFromStep(stepRef):
     return WMTaskHelper(taskNode)
 
 
+def buildLumiMask(runs, lumis):
+    """
+        Runs are saved in the spec as a list of integers.
+        The lumi mask associated to eac run is saved as a list of strings
+        where each string is in a format like '1,4,23,45'
+
+        The method convert these parameters in the corresponding lumiMask,
+        e.g.:  runs=['3','4'], lumis=['1,4,23,45', '5,84,234,445'] => lumiMask = {'3':[[1,4],[23,45]],'4':[[5,84],[234,445]]}
+    """
+    
+    if len(runs) != len(lumis):
+        raise ValueError("runs and lumis must have same lenght")
+    for lumi in lumis:
+        if len(lumi.split(',')) % 2:
+            raise ValueError("Needs an even number of lumi in each element of lumis list")
+            
+            
+    lumiLists = [map(list, zip([int(y) for y in x.split(',')][::2], [int(y) for y in x.split(',')][1::2])) for x in lumis]
+    lumiMask = dict(zip(runs, lumiLists))
+    return lumiMask
+
 
 class WMTaskHelper(TreeHelper):
     """
@@ -761,7 +782,131 @@ class WMTaskHelper(TreeHelper):
         """
         self.data.constraints.sites.blacklist = siteBlacklist
         return
-    
+
+    def listOutputDatasetsAndModules(self):
+        """
+        _listOutputDatasetsAndModules_
+
+        Get the output datasets per output module for this task
+        """
+        outputDatasets = []
+        for stepName in self.listAllStepNames():
+                stepHelper = self.getStepHelper(stepName)
+
+                if not getattr(stepHelper.data.output, "keep", True):
+                    continue
+
+                if stepHelper.stepType() == "CMSSW" or \
+                       stepHelper.stepType() == "MulticoreCMSSW":
+                    for outputModuleName in stepHelper.listOutputModules():
+                        outputModule = stepHelper.getOutputModule(outputModuleName)
+                        outputDataset = "/%s/%s/%s" % (outputModule.primaryDataset,
+                                                       outputModule.processedDataset,
+                                                       outputModule.dataTier)
+                        outputDatasets.append({"outputModule"  : outputModuleName,
+                                               "outputDataset" : outputDataset})
+
+        return outputDatasets
+
+    def setSubscriptionInformation(self, custodialSites = None, nonCustodialSites = None,
+                                         autoApproveSites = None, priority = "Low",
+                                         primaryDataset = None, dataTier = None):
+        """
+        _setSubscriptionsInformation_
+
+        Set the subscription information for this task's datasets
+        The subscriptions information is structured as follows:
+        data.subscriptions.outputModules is a list of all output modules with configured datasets
+        data.subscriptions.<outputModule>.dataset
+        data.subscriptions.<outputModule>.custodialSites
+        data.subscriptions.<outputModule>.nonCustodialSites
+        data.subscriptions.<outputModule>.autoApproveSites
+        data.subscriptions.<outputModule>.priority
+
+        The filters arguments allow to define a dataTier and primaryDataset. Only datasets
+        matching those values will be configured.
+        """
+
+        if not hasattr(self.data, "subscriptions"):
+            self.data.section_("subscriptions")
+            self.data.subscriptions.outputModules = []
+
+        outputDatasets = self.listOutputDatasetsAndModules()
+
+        for entry in outputDatasets:
+            outputDataset = entry["outputDataset"]
+            outputModule = entry["outputModule"]
+
+            primDs = outputDataset.split('/')[1]
+            tier = outputDataset.split('/')[3]
+            if primaryDataset and primDs != primaryDataset:
+                continue
+            if dataTier and tier != dataTier:
+                continue
+
+            if outputModule not in self.data.subscriptions.outputModules:
+                self.data.subscriptions.outputModules.append(outputModule)
+                outputModuleSection = self.data.subscriptions.section_(outputModule)
+                outputModuleSection.dataset = outputDataset
+                outputModuleSection.custodialSites = []
+                outputModuleSection.nonCustodialSites = []
+                outputModuleSection.autoApproveSites = []
+                outputModuleSection.priority = "Low"
+
+            outputModuleSection = getattr(self.data.subscriptions, outputModule)
+            if custodialSites:
+                outputModuleSection.custodialSites = custodialSites
+            if nonCustodialSites:
+                outputModuleSection.nonCustodialSites = nonCustodialSites
+            if autoApproveSites:
+                outputModuleSection.autoApproveSites = autoApproveSites
+            outputModuleSection.priority = priority
+
+        return
+
+    def updateSubscriptionDataset(self, outputModuleName, outputModuleInfo):
+        """
+        _updateSubscriptionDataset_
+
+        Updates the dataset in the subscription information for the given output module,
+        if the given output module doesn't exist it does nothing.
+        """
+        if not hasattr(self.data, "subscriptions"):
+            return
+
+        if hasattr(self.data.subscriptions, outputModuleName):
+            subscriptionInfo = getattr(self.data.subscriptions, outputModuleName)
+            subscriptionInfo.dataset = '/%s/%s/%s' % (getattr(outputModuleInfo, "primaryDataset"),
+                                                      getattr(outputModuleInfo, "processedDataset"),
+                                                      getattr(outputModuleInfo, "dataTier"))
+        return
+
+    def getSubscriptionInformation(self):
+        """
+        _getSubscriptionInformation_
+
+        Get the subscription configuration for the task
+        return a dictionary with the following structure
+        {<dataset> : {CustodialSites : [],
+                      NonCustodialSites : [],
+                      AutoApproveSites : [],
+                      Priority : Low
+                     }
+        }
+        """
+        if not hasattr(self.data, "subscriptions"):
+            return {}
+
+        subInformation = {}
+        for outputModule in self.data.subscriptions.outputModules:
+            outputModuleSection = getattr(self.data.subscriptions, outputModule)
+            dataset = outputModuleSection.dataset
+            subInformation[dataset] = {"CustodialSites" : outputModuleSection.custodialSites,
+                                       "NonCustodialSites" : outputModuleSection.nonCustodialSites,
+                                       "AutoApproveSites" : outputModuleSection.autoApproveSites,
+                                       "Priority" : outputModuleSection.priority}
+        return subInformation
+
     def parentProcessingFlag(self):
         """
         _parentProcessingFlag_
@@ -1027,7 +1172,47 @@ class WMTaskHelper(TreeHelper):
         Get the task acquisition era
         """
         return getattr(self.data.parameters, 'acquisitionEra', None)
-    
+
+    def getLumiMask(self):
+        """
+            return the lumi mask
+        """
+        runs = getattr(self.data.input.splitting, 'runs', None)
+        lumis = getattr(self.data.input.splitting, 'lumis', None)
+        if runs and lumis:
+            return buildLumiMask(runs, lumis)
+
+        return {}
+
+    def setInputLocationFlag(self, flag = True):
+        """
+        _setInputLocationFlag_
+
+        Store a flag that indicates that the site
+        whitelist/blacklist should be used
+        as the location for the input data.
+        Trust it blindly and don't check PhEDEx.
+        """
+        self.data.input.trustSiteLists = True
+
+    def inputLocationFlag(self):
+        """
+        _getInputLocationFlag
+
+        Get the flag which tells
+        whether to use the site lists
+        as data location or not
+        """
+        return getattr(self.data.input, "trustSiteLists", False)
+
+    def deleteChild(self, childName):
+        """
+        _deleteChild_
+
+        Remove the child task from the tree, if it exists
+        """
+        self.deleteNode(childName)
+
 class WMTask(ConfigSectionTree):
     """
     _WMTask_
@@ -1049,13 +1234,16 @@ class WMTask(ConfigSectionTree):
         self.section_("constraints")
         self.section_("input")
         self.section_("notifications")
+        self.section_("subscriptions")
         self.notifications.targets = []
         self.input.sandbox = None
+        self.input.trustSiteLists = False
         self.input.section_("splitting")
         self.input.splitting.algorithm = None
         self.constraints.section_("sites")
         self.constraints.sites.whitelist = []
         self.constraints.sites.blacklist = []
+        self.subscriptions.outputModules = []
         self.input.section_("WMBS")
 
 

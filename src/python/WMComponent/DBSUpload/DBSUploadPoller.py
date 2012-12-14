@@ -62,22 +62,25 @@ def createDatasetFromInfo(info):
     Create a dataset object from basic information
 
     """
-    dataset = {'ID':               info.get('Dataset'),
-               'Path':             info.get('Path'),
-               'ProcessedDataset': info.get('ProcessedDataset'),
-               'PrimaryDataset':   info.get('PrimaryDataset'),
-               'DataTier':         info.get('DataTier'),
-               'Algo':             info.get('Algo'),
-               'AlgoInDBS':        info.get('AlgoInDBS', None),
-               'DASInDBS':         info.get('DASInDBS', None),
-               'status':           info.get('ValidStatus', 'PRODUCTION'),
-               'globalTag':        info.get('GlobalTag', ''),
-               'parent':           info.get('Parent', '')
+    dataset = {'ID':               info['Dataset'],
+               'Path':             info['Path'],
+               'ProcessedDataset': info['ProcessedDataset'],
+               'PrimaryDataset':   info['PrimaryDataset'],
+               'DataTier':         info['DataTier'],
+               'Algo':             info['Algo'],
+               'AlgoInDBS':        info['AlgoInDBS'],
+               'DASInDBS':         info['DASInDBS'],
+               'status':           info['ValidStatus'],
+               'globalTag':        info['GlobalTag'],
+               'parent':           info['Parent']
                }
-    if dataset['globalTag'] == None:
-        dataset['globalTag'] = ''
+
     if dataset['status'] == None:
         dataset['status'] = 'PRODUCTION'
+
+    if dataset['globalTag'] == None:
+        dataset['globalTag'] = ''
+
     return dataset
 
 def createAlgoFromInfo(info):
@@ -85,13 +88,13 @@ def createAlgoFromInfo(info):
     Create an Algo object from basic information
 
     """
-    
-    algo = {'ApplicationName':    info.get('ApplicationName'),
-            'ApplicationFamily':  info.get('ApplicationFamily'),
-            'ApplicationVersion': info.get('ApplicationVersion'),
-            'PSetHash':           info.get('PSetHash'),
+
+    algo = {'ApplicationName':    info['ApplicationName'],
+            'ApplicationFamily':  info['ApplicationFamily'],
+            'ApplicationVersion': info['ApplicationVersion'],
+            'PSetHash':           info['PSetHash'],
             'PSetContent':        None,
-            'InDBS':              info.get('AlgoInDBS', None)
+            'InDBS':              info['AlgoInDBS']
             }
 
     configString = info.get('PSetContent')
@@ -123,7 +126,7 @@ def createAlgoFromInfo(info):
             msg += str(traceback.format_exc())
             logging.error(msg)
             logging.debug("URL: %s,  DB: %s,  ID: %s" % (cacheURL, cacheDB, configID))
-            
+
     return algo
 
 def sortByDAS(incoming):
@@ -168,7 +171,7 @@ def createBlock(datasetPath, location):
 def preassignBlocks(files, blocks):
     """
     _preassignBlocks_
-    
+
     Take a dictionary of predefined blocks and a dictionary
     of predefined files sorted by location, and assign files that were
     already in blocks to those blocks again
@@ -216,10 +219,10 @@ class DBSUploadPoller(BaseWorkerThread):
     def __init__(self, config, dbsconfig = None):
         """
         Initialise class members
-        
+
         """
         myThread = threading.currentThread()
-        
+
         BaseWorkerThread.__init__(self)
         self.config     = config
 
@@ -255,14 +258,14 @@ class DBSUploadPoller(BaseWorkerThread):
 
         if dbsconfig == None:
             self.dbsconfig = config
-            
+
         # initialize the alert framework (if available - config.Alert present)
-        #    self.sendAlert will be then be available    
+        #    self.sendAlert will be then be available
         self.initAlerts(compName = "DBSUpload")
 
         return
-        
-    
+
+
     def algorithm(self, parameters = None):
         """
         Runs over all available DBSBuffer filesets/algos
@@ -342,7 +345,7 @@ class DBSUploadPoller(BaseWorkerThread):
                 # back into those blocks
                 # pass by reference
                 blockDict, locationDict = preassignBlocks(files = locationDict, blocks = blockDict)
-                
+
                 # Now go over all the files
                 for location in locationDict.keys():
                     # Split files into blocks
@@ -374,7 +377,7 @@ class DBSUploadPoller(BaseWorkerThread):
             # Time to set the status of the files
 
             lfnList = [x['lfn'] for x in files]
-            self.setStatus.execute(lfns = lfnList, status = "READY", 
+            self.setStatus.execute(lfns = lfnList, status = "READY",
                                    conn = myThread.transaction.conn,
                                    transaction = myThread.transaction)
 
@@ -394,7 +397,7 @@ class DBSUploadPoller(BaseWorkerThread):
         Upload them
         """
         myThread = threading.currentThread()
-        
+
 
         # Get the blocks
         # This should grab all Pending and Open blocks
@@ -434,7 +437,7 @@ class DBSUploadPoller(BaseWorkerThread):
         # The blocks
         # And the files
         # Time to sort the files into blocks
-        
+
         # the counter / watcher of the alertUploadQueueSize to possibly send alerts
         alertUploadQueueSize = getattr(self.config.DBSUpload, "alertUploadQueueSize", None)
         alertUploadQueueSizeCounter = 0
@@ -446,14 +449,14 @@ class DBSUploadPoller(BaseWorkerThread):
                     logging.debug("Setting file %s to block %s" % (f['lfn'], block['Name']))
                     block['newFiles'].append(f)
                     alertUploadQueueSizeCounter += 1
-                    
+
         # check alertUploadQueueSize threshold (alert condition)
         if alertUploadQueueSize:
             if alertUploadQueueSizeCounter >= int(alertUploadQueueSize):
                 msg = ("DBS upload queue size (%s) exceeded configured "
                        "threshold (%s)." % (alertUploadQueueSizeCounter, alertUploadQueueSize))
                 self.sendAlert(6, msg = msg)
-                
+
         # Check for block timeout
         for block in blocks:
             if time.time() - block['CreationDate'] > self.maxBlockTime:
@@ -479,7 +482,7 @@ class DBSUploadPoller(BaseWorkerThread):
                         # Else you only deal with blocks if they have new files
                         logging.debug("Attaching block %s" % block['Name'])
                         readyBlocks.append(block)
-                        
+
             if len(readyBlocks) < 1:
                 # Nothing to do
                 logging.debug("Nothing to do for DAS %i in uploadBlocks" % dasID)
@@ -494,11 +497,11 @@ class DBSUploadPoller(BaseWorkerThread):
                     originalErr = sys.stderr
                     sys.stdout = open(os.devnull, 'w')
                     sys.stderr = open(os.devnull, 'w')
-                    
+
                     if getattr(self.config.DBSUpload, 'abortStepThree', False):
                         # Blow the stack for testing purposes
                         raise DBSUploadPollerException('None')
-                    
+
                     logging.info("About to upload to DBS for DAS %i with %i blocks" % (dasID, len(readyBlocks)))
                     affBlocks = self.dbsInterface.runDBSBuffer(algo = algo,
                                                                dataset = dataset,
@@ -506,11 +509,11 @@ class DBSUploadPoller(BaseWorkerThread):
 
                     sys.stdout = originalOut
                     sys.stderr = originalErr
-                    
-                    
+
+
                     # Update DBSBuffer with current information
                     myThread.transaction.begin()
-                
+
                     for block in affBlocks:
                         logging.info("Successfully inserted %i files for block %s." % (len(block['insertedFiles']),
                                                                                        block['Name']))
@@ -533,7 +536,7 @@ class DBSUploadPoller(BaseWorkerThread):
             # then we just rollback the transaction and continue to the next
             # block - ignoring the exception
             except WMException:
-                if getattr(myThread, 'transaction', None) != None: 
+                if getattr(myThread, 'transaction', None) != None:
                     myThread.transaction.rollbackForError()
                 pass
                 #raise
@@ -543,11 +546,11 @@ class DBSUploadPoller(BaseWorkerThread):
                 msg += str(traceback.format_exc())
                 logging.error(msg)
                 self.sendAlert(6, msg = msg)
-                if getattr(myThread, 'transaction', None) != None: 
+                if getattr(myThread, 'transaction', None) != None:
                     myThread.transaction.rollbackForError()
                 pass
                 #raise DBSUploadPollerException(msg)
-            
+
 
         return
 
@@ -591,7 +594,7 @@ class DBSUploadPoller(BaseWorkerThread):
         if currentBlock['NumberOfFiles'] > 0:
             blocksToHandle.append(currentBlock)
 
-                
+
         return blocksToHandle
 
 
@@ -628,7 +631,7 @@ class DBSUploadPoller(BaseWorkerThread):
         try:
             # Do this in its own transaction
             myThread.transaction.begin()
-            
+
             for block in readyBlocks:
                 # First insert each block
                 logging.info("Prepping block %s for DBS with status %s" % (block['Name'], block['open']))
@@ -636,7 +639,7 @@ class DBSUploadPoller(BaseWorkerThread):
                                                 locations = [block['location']],
                                                 openStatus = block['open'],
                                                 time = int(block['CreationDate']))
-                
+
                 # Then insert files from each block
                 blockFileList = []
                 for f in block.get('newFiles', []):
@@ -657,7 +660,7 @@ class DBSUploadPoller(BaseWorkerThread):
             myThread.transaction.commit()
 
         except WMException, ex:
-            if getattr(myThread, 'transaction', None) != None: 
+            if getattr(myThread, 'transaction', None) != None:
                 myThread.transaction.rollback()
             raise
         except Exception, ex:
@@ -666,7 +669,7 @@ class DBSUploadPoller(BaseWorkerThread):
             msg += str(traceback.format_exc())
             logging.error(msg)
             self.sendAlert(6, msg = msg)
-            if getattr(myThread, 'transaction', None) != None: 
+            if getattr(myThread, 'transaction', None) != None:
                 myThread.transaction.rollback()
             raise DBSUploadPollerException(msg)
 

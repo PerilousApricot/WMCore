@@ -16,7 +16,7 @@ def getTestArguments():
     _getTestArguments_
 
     This should be where the default REQUIRED arguments go
-    This serves as documentation for what is currently required 
+    This serves as documentation for what is currently required
     by the standard ReReco workload in importable format.
 
     NOTE: These are test values.  If used in real workflows they
@@ -27,25 +27,24 @@ def getTestArguments():
         "AcquisitionEra": "WMAgentCommissioning10",
         "Requestor": "sfoulkes@fnal.gov",
         "InputDataset": "/MinimumBias/Commissioning10-v4/RAW",
-        "CMSSWVersion": "CMSSW_3_5_8",
+        "CMSSWVersion": "CMSSW_3_9_7",
         "ScramArch": "slc5_ia32_gcc434",
         "ProcessingVersion": "2",
         "SkimInput": "output",
         "GlobalTag": "GR10_P_v4::All",
-        
+
         "CouchURL": os.environ.get("COUCHURL", None),
         "CouchDBName": "scf_wmagent_configcache",
-        
+        # or alternatively CouchURL part can be replaced by ConfigCacheUrl,
+        # then ConfigCacheUrl + CouchDBName + ConfigCacheID
+        "ConfigCacheUrl": None,
+
         "ProcScenario": "cosmics",
         "DashboardHost": "127.0.0.1",
         "DashboardPort": 8884,
-        #"ProcConfigCacheID": "03da10e20c7b98c79f9d6a5c8900f83b",
-
-        #"SkimConfigs": [{"SkimName": "Prescaler", "SkimInput": "output",
-        #                "SkimSplitAlgo": "FileBased",
-        #                "SkimSplitArgs": {"files_per_job": 1, "include_parents": True},
-        #                "ConfigCacheID": "3adb4bad8f05cabede27969face2e59d",
-        #                "Scenario": None}]
+        "TimePerEvent" : 1,
+        "Memory"       : 1,
+        "SizePerEvent" : 1,
         }
 
     return arguments
@@ -74,7 +73,7 @@ class ReRecoWorkloadFactory(DataProcessingWorkloadFactory):
         for mergeTask in procTask.childTaskIterator():
             if mergeTask.taskType() == "Merge":
                 procMergeTasks[mergeTask.data.input.outputModule] = mergeTask
-        
+
         for skimConfig in self.skimConfigs:
             if not procMergeTasks.has_key(skimConfig["SkimInput"]):
                 # This is an extremely rare case - we have to wait until the entire system is built to get to this point
@@ -84,12 +83,13 @@ class ReRecoWorkloadFactory(DataProcessingWorkloadFactory):
                 error += "Please change your skim input to be one of the following: %s" % procMergeTasks.keys()
                 self.raiseValidationException(msg = error)
 
-        
+
             mergeTask = procMergeTasks[skimConfig["SkimInput"]]
             skimTask = mergeTask.addTask(skimConfig["SkimName"])
             parentCmsswStep = mergeTask.getStep("cmsRun1")
             outputMods = self.setupProcessingTask(skimTask, "Skim", inputStep = parentCmsswStep, inputModule = "Merged",
                                                   couchURL = self.couchURL, couchDBName = self.couchDBName,
+                                                  configCacheUrl = self.configCacheUrl,
                                                   configDoc = skimConfig["ConfigCacheID"], splitAlgo = self.skimJobSplitAlgo,
                                                   splitArgs = self.skimJobSplitArgs)
             self.addLogCollectTask(skimTask, taskName = "%sLogCollect" % skimConfig["SkimName"])
@@ -137,19 +137,25 @@ class ReRecoWorkloadFactory(DataProcessingWorkloadFactory):
     def validateSchema(self, schema):
         """
         _validateSchema_
-        
+
         Check for required fields, and some skim facts
         """
+        # TODO
+        # this list of required arguments is most likely incomplete, obsolete ...
         requiredFields = ["CMSSWVersion", "ScramArch",
                           "GlobalTag", "InputDataset"]
         self.requireValidateFields(fields = requiredFields, schema = schema,
                                    validate = False)
 
-        if schema.get('ProcConfigCacheID', None) and schema.get('CouchURL', None) and schema.get('CouchDBName', None):
-            outMod = self.validateConfigCacheExists(configID = schema['ProcConfigCacheID'],
-                                                    couchURL = schema["CouchURL"],
+        if schema.get('ConfigCacheID', None) and schema.get('CouchURL', None) and schema.get('CouchDBName', None):
+            couchUrl = schema.get("ConfigCacheUrl", None) or schema["CouchURL"]
+            outMod = self.validateConfigCacheExists(configID = schema['ConfigCacheID'],
+                                                    couchURL = couchUrl,
                                                     couchDBName = schema["CouchDBName"],
                                                     getOutputModules = True)
+        # TODO
+        # ProcScenario is now in request arguments Scenario, however this change
+        # didn't quite make it in the workflows implementation (#4280) 
         elif not schema.get('ProcScenario', None):
             self.raiseValidationException(msg = "No Scenario or Config in Processing Request!")
 
@@ -158,7 +164,6 @@ class ReRecoWorkloadFactory(DataProcessingWorkloadFactory):
         except AssertionError:
             self.raiseValidationException(msg = "Invalid input dataset!")
 
-        return
 
 
 def rerecoWorkload(workloadName, arguments):
@@ -170,6 +175,3 @@ def rerecoWorkload(workloadName, arguments):
     """
     myReRecoFactory = ReRecoWorkloadFactory()
     return myReRecoFactory(workloadName, arguments)
-
-
-

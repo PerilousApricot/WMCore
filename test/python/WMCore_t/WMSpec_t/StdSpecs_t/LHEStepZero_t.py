@@ -46,13 +46,13 @@ class LHEStepZeroTest(MonteCarloTest):
         defaultArguments = getTestArguments()
         defaultArguments["CouchURL"] = os.environ["COUCHURL"]
         defaultArguments["CouchDBName"] = "rereco_t"
-        defaultArguments["ProcConfigCacheID"] = self.injectMonteCarloConfig()
+        defaultArguments["ConfigCacheID"] = self.injectMonteCarloConfig()
 
         testWorkload = lheStepZeroWorkload("TestWorkload", defaultArguments)
         testWorkload.setSpecUrl("somespec")
         testWorkload.setOwnerDetails("sfoulkes@fnal.gov", "DWMWM")
 
-        testWMBSHelper = WMBSHelper(testWorkload, "Production", "SomeBlock")
+        testWMBSHelper = WMBSHelper(testWorkload, "Production", "SomeBlock", cachepath = self.testInit.testDir)
         testWMBSHelper.createTopLevelFileset()
         testWMBSHelper.createSubscription(testWMBSHelper.topLevelTask, testWMBSHelper.topLevelFileset)
 

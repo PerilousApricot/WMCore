@@ -88,6 +88,7 @@ class StdBase(object):
         self.dqmUploadProxy = None
         self.dqmUploadUrl = None
         self.dqmSequences = None
+        self.dqmConfigCacheID = None
         self.procScenario = None
         self.asyncDest = None
         self.owner_vogroup = "DEFAULT"
@@ -137,12 +138,16 @@ class StdBase(object):
         self.dqmUploadProxy = arguments.get("DQMUploadProxy", None)
         self.dqmUploadUrl = arguments.get("DQMUploadUrl", "https://cmsweb.cern.ch/dqm/dev")
         self.dqmSequences = arguments.get("DqmSequences", [])
+        self.dqmConfigCacheID = arguments.get("DQMConfigCacheID", None)
         self.procScenario = arguments.get("ProcScenario", None)
         self.userSandbox = arguments.get("userSandbox", None)
         self.userFiles = arguments.get("userFiles", [])
         self.owner_vogroup = arguments.get("VoGroup", '')
         self.owner_vorole = arguments.get("VoRole", '')
         self.asyncDest = arguments.get("asyncDest", None)
+        self.enableHarvesting = arguments.get("EnableHarvesting", True)
+        self.enableNewStageout = arguments.get("EnableNewStageout", False)
+
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True
         else:
@@ -163,7 +168,7 @@ class StdBase(object):
 
     def determineOutputModules(self, scenarioFunc = None, scenarioArgs = None,
                                configDoc = None, couchURL = None,
-                               couchDBName = None):
+                               couchDBName = None, configCacheUrl = None):
         """
         _determineOutputModules_
 
@@ -172,7 +177,8 @@ class StdBase(object):
         """
         outputModules = {}
         if configDoc != None and configDoc != "":
-            configCache = ConfigCache(couchURL, couchDBName)
+            url = configCacheUrl or couchURL
+            configCache = ConfigCache(url, couchDBName)
             configCache.loadByID(configDoc)
             outputModules = configCache.getOutputModuleInfo()
         else:
@@ -290,8 +296,8 @@ class StdBase(object):
                             userDN = None, asyncDest = None, owner_vogroup = "DEFAULT",
                             owner_vorole = "DEFAULT", stepType = "CMSSW",
                             userSandbox = None, userFiles = [], primarySubType = None,
-                            forceMerged = False, forceUnmerged = False):
-
+                            forceMerged = False, forceUnmerged = False,
+                            configCacheUrl = None):
         """
         _setupProcessingTask_
 
@@ -309,6 +315,7 @@ class StdBase(object):
           configDoc empty - Use a Configuration.DataProcessing config.  The
             scenarioName, scenarioFunc and scenarioArgs parameters must not be
             empty.
+          if configCacheUrl is not empty, use that plus couchDBName + configDoc if not empty  
 
         The seeding and totalEvents parameters are only used for production jobs.
         """
@@ -320,8 +327,11 @@ class StdBase(object):
         procTaskStageOut.setUserDN(userDN)
         procTaskStageOut.setAsyncDest(asyncDest)
         procTaskStageOut.setUserRoleAndGroup(owner_vogroup, owner_vorole)
+        procTaskStageOut.setNewStageoutOverride(self.enableNewStageout)
         procTaskLogArch = procTaskCmssw.addStep("logArch1")
         procTaskLogArch.setStepType("LogArchive")
+        procTaskLogArch.setNewStageoutOverride(self.enableNewStageout)
+        
         procTask.applyTemplates()
         procTask.setTaskPriority(self.priority)
 
@@ -382,7 +392,8 @@ class StdBase(object):
         procTaskCmsswHelper.setEventsPerLumi(eventsPerLumi)
 
         configOutput = self.determineOutputModules(scenarioFunc, scenarioArgs,
-                                                   configDoc, couchURL, couchDBName)
+                                                   configDoc, couchURL, couchDBName,
+                                                   configCacheUrl=configCacheUrl)
         outputModules = {}
         for outputModuleName in configOutput.keys():
             outputModule = self.addOutputModule(procTask,
@@ -395,7 +406,8 @@ class StdBase(object):
             outputModules[outputModuleName] = outputModule
 
         if configDoc != None and configDoc != "":
-            procTaskCmsswHelper.setConfigCache(couchURL, configDoc, couchDBName)
+            url = configCacheUrl or couchURL
+            procTaskCmsswHelper.setConfigCache(url, configDoc, couchDBName)
         else:
             # delete dataset information from scenarioArgs
             if 'outputs' in scenarioArgs:
@@ -514,6 +526,7 @@ class StdBase(object):
         self.addDashboardMonitoring(logCollectTask)
         logCollectStep = logCollectTask.makeStep("logCollect1")
         logCollectStep.setStepType("LogCollect")
+        logCollectStep.setNewStageoutOverride(self.enableNewStageout)
         logCollectTask.applyTemplates()
         logCollectTask.setSplittingAlgorithm("MinFileBased", files_per_job = filesPerJob)
         logCollectTask.setTaskType("LogCollect")
@@ -524,7 +537,7 @@ class StdBase(object):
 
     def addMergeTask(self, parentTask, parentTaskSplitting, parentOutputModuleName,
                      parentStepName = "cmsRun1", doLogCollect = True,
-                     doHarvesting = True):
+                     lfn_counter = 0):
         """
         _addMergeTask_
 
@@ -537,8 +550,12 @@ class StdBase(object):
 
         mergeTaskStageOut = mergeTaskCmssw.addStep("stageOut1")
         mergeTaskStageOut.setStepType("StageOut")
+        mergeTaskStageOut.setNewStageoutOverride(self.enableNewStageout)
+
         mergeTaskLogArch = mergeTaskCmssw.addStep("logArch1")
         mergeTaskLogArch.setStepType("LogArchive")
+        mergeTaskLogArch.setNewStageoutOverride(self.enableNewStageout)
+
 
         mergeTask.setTaskLogBaseLFN(self.unmergedLFNBase)
         if doLogCollect:
@@ -572,7 +589,8 @@ class StdBase(object):
                                         max_merge_events = self.maxMergeEvents,
                                         max_wait_time = self.maxWaitTime,
                                         siteWhitelist = self.siteWhitelist,
-                                        siteBlacklist = self.siteBlacklist)
+                                        siteBlacklist = self.siteBlacklist,
+                                        initial_lfn_counter = lfn_counter)
 
         if getattr(parentOutputModule, "dataTier") == "DQMROOT":
             mergeTaskCmsswHelper.setDataProcessingConfig("do_not_use", "merge",
@@ -587,9 +605,11 @@ class StdBase(object):
                              forceMerged = True)
 
         self.addCleanupTask(parentTask, parentOutputModuleName)
-        if doHarvesting and getattr(parentOutputModule, "dataTier") in ["DQMROOT", "DQM"]:
-            self.addDQMHarvestTask(mergeTask, "Merged", self.dqmUploadProxy,
-                                   self.periodicHarvestingInterval)
+        if self.enableHarvesting and getattr(parentOutputModule, "dataTier") in ["DQMROOT", "DQM"]:
+            self.addDQMHarvestTask(mergeTask, "Merged",
+                                   uploadProxy = self.dqmUploadProxy,
+                                   periodic_harvest_interval= self.periodicHarvestingInterval,
+                                   doLogCollect = doLogCollect)
         return mergeTask
 
     def addCleanupTask(self, parentTask, parentOutputModuleName):
@@ -656,23 +676,30 @@ class StdBase(object):
         harvestTask.setSplittingAlgorithm("Harvest",
                                           periodic_harvest_interval = periodic_harvest_interval)
 
-        if getattr(parentOutputModule, "dataTier") == "DQMROOT":
-            harvestTaskCmsswHelper.setDataProcessingConfig(self.procScenario, "dqmHarvesting",
-                                                           globalTag = self.globalTag,
-                                                           datasetName = "/%s/%s/%s" % (getattr(parentOutputModule, "primaryDataset"),
-                                                                                        getattr(parentOutputModule, "processedDataset"),
-                                                                                        getattr(parentOutputModule, "dataTier")),
-                                                           runNumber = self.runNumber,
-                                                           dqmSeq = self.dqmSequences,
-                                                           newDQMIO = True)
+        datasetName = "/%s/%s/%s" % (getattr(parentOutputModule, "primaryDataset"),
+                                     getattr(parentOutputModule, "processedDataset"),
+                                     getattr(parentOutputModule, "dataTier"))
+
+        if self.dqmConfigCacheID is not None:
+            if getattr(self, "configCacheUrl", None) is not None:
+                harvestTaskCmsswHelper.setConfigCache(self.configCacheUrl, self.dqmConfigCacheID, self.couchDBName)
+            else:
+                harvestTaskCmsswHelper.setConfigCache(self.couchURL, self.dqmConfigCacheID, self.couchDBName)
+            harvestTaskCmsswHelper.setDatasetName(datasetName)
         else:
-            harvestTaskCmsswHelper.setDataProcessingConfig(self.procScenario, "dqmHarvesting",
-                                                           globalTag = self.globalTag,
-                                                           datasetName = "/%s/%s/%s" % (getattr(parentOutputModule, "primaryDataset"),
-                                                                                        getattr(parentOutputModule, "processedDataset"),
-                                                                                        getattr(parentOutputModule, "dataTier")),
-                                                           runNumber = self.runNumber,
-                                                           dqmSeq = self.dqmSequences)
+            if getattr(parentOutputModule, "dataTier") == "DQMROOT":
+                harvestTaskCmsswHelper.setDataProcessingConfig(self.procScenario, "dqmHarvesting",
+                                                               globalTag = self.globalTag,
+                                                               datasetName = datasetName,
+                                                               runNumber = self.runNumber,
+                                                               dqmSeq = self.dqmSequences,
+                                                               newDQMIO = True)
+            else:
+                harvestTaskCmsswHelper.setDataProcessingConfig(self.procScenario, "dqmHarvesting",
+                                                               globalTag = self.globalTag,
+                                                               datasetName = datasetName,
+                                                               runNumber = self.runNumber,
+                                                               dqmSeq = self.dqmSequences)
 
         harvestTaskUploadHelper = harvestTaskUpload.getTypeHelper()
         harvestTaskUploadHelper.setProxyFile(uploadProxy)
@@ -717,15 +744,7 @@ class StdBase(object):
         If something breaks, raise a WMSpecFactoryException.  A message
         in that exception will be transferred to an HTTP Error later on.
         """
-
-        #Check the workload for harvesting task, if there is a
-        #harvesting task then a self.procScenario must be defined
-        for task in workload.getAllTasks():
-            if task.taskType() == "Harvesting":
-                if not self.procScenario:
-                    self.raiseValidationException(msg = "A DQM harvesting task was found, you must specify a scenario")
-
-        return
+        pass
 
     def factoryWorkloadConstruction(self, workloadName, arguments):
         """
@@ -766,6 +785,22 @@ class StdBase(object):
         for field in performanceFields:
             self._validatePerformanceField(field, schema)
 
+        if schema.get("EnableHarvesting", True):
+            # If enableHarvesting requested, then a few conditions must be met
+            if "DQMConfigCacheID" not in schema and "ProcScenario" not in schema:
+                self.raiseValidationException("Harvesting was requested, but no scenario or config cache ID was given")
+            if "DQMConfigCacheID" in schema:
+                if "ConfigCacheUrl" not in schema and "CouchURL" not in schema:
+                    self.raiseValidationException("Harvesting was requested, but no couch url was given")
+                if "CouchDBName" not in schema:
+                    self.raiseValidationException("Harvesting was requested, but no couchdb name was given")
+                couchUrl = schema.get("ConfigCacheUrl", None) or schema["CouchURL"]
+                self.validateConfigCacheExists(configID = schema["DQMConfigCacheID"],
+                                                    couchURL = couchUrl,
+                                                    couchDBName = schema["CouchDBName"])
+
+        return
+
     def _validatePerformanceField(self, field, schema):
         """
         __validatePerformanceField_
@@ -792,7 +827,7 @@ class StdBase(object):
 
         for field in fields:
             if not field in schema.keys():
-                msg = "Missing required field %s in workload validation!" % field
+                msg = "Missing required field '%s' in workload validation!" % field
                 self.raiseValidationException(msg = msg)
             if schema[field] == None:
                 msg = "NULL value for required field %s!" % field
@@ -801,7 +836,7 @@ class StdBase(object):
                 try:
                     identifier(candidate = schema[field])
                 except AssertionError, ex:
-                    msg = "Schema value for field %s failed Lexicon validation" % field
+                    msg = "Schema value for field '%s' failed Lexicon validation" % field
                     self.raiseValidationException(msg = msg)
         return
 
@@ -826,10 +861,8 @@ class StdBase(object):
 
         if configID == '' or configID == ' ':
             self.raiseValidationException(msg = "ConfigCacheID is invalid and cannot be loaded")
-
-        from WMCore.Cache.WMConfigCache import ConfigCache
-        configCache = ConfigCache(dbURL = couchURL,
-                                  couchDBName = couchDBName,
+            
+        configCache = ConfigCache(dbURL = couchURL, couchDBName = couchDBName,
                                   id = configID)
         try:
             configCache.loadByID(configID = configID)

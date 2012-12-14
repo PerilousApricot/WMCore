@@ -17,7 +17,6 @@ import WMCore.RequestManager.RequestDB.Interface.Request.ChangeState as ChangeSt
 import WMCore.RequestManager.RequestDB.Interface.Request.GetRequest as GetRequest
 import WMCore.HTTPFrontEnd.RequestManager.ReqMgrWebTools as Utilities
 from WMCore.HTTPFrontEnd.RequestManager.ReqMgrAuth import ReqMgrAuth
-import WMCore.RequestManager.OpsClipboard.Inject as OpsClipboard
 import WMCore.Lexicon
 from WMCore.Wrappers import JsonWrapper
 
@@ -36,10 +35,7 @@ class Assign(WebAPI):
         # Take a guess
         self.templatedir = config.templates
         self.couchUrl = config.couchUrl
-        self.clipboardDB = config.clipboardDB
         cleanUrl = Utilities.removePasswordFromUrl(self.couchUrl)
-        self.clipboardUrl = "%s/%s/_design/OpsClipboard/index.html" % (cleanUrl, self.clipboardDB)
-        self.opshold = config.opshold
         self.configDBName = config.configDBName
         self.wmstatWriteURL = "%s/%s" % (self.couchUrl.rstrip('/'), config.wmstatDBName)
         if not noSiteDB:
@@ -47,18 +43,19 @@ class Assign(WebAPI):
         else:
             self.sites = []
         self.allMergedLFNBases =  [
-            "/store/backfill/1", "/store/backfill/2", 
-            "/store/data",  "/store/mc", "/store/generator", "/store/relval"]
+            "/store/backfill/1", "/store/backfill/2",
+            "/store/data",  "/store/mc", "/store/generator", "/store/relval",
+            "/store/hidata", "/store/himc"]
         self.allUnmergedLFNBases = ["/store/unmerged", "/store/temp"]
 
         self.mergedLFNBases = {
-             "ReReco" : ["/store/backfill/1", "/store/backfill/2", "/store/data"],
-             "DataProcessing" : ["/store/backfill/1", "/store/backfill/2", "/store/data"],
-             "ReDigi" : ["/store/backfill/1", "/store/backfill/2", "/store/data", "/store/mc"],
-             "MonteCarlo" : ["/store/backfill/1", "/store/backfill/2", "/store/mc"],
-             "RelValMC" : ["/store/backfill/1", "/store/backfill/2", "/store/mc"],
-             "Resubmission" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/data"],
-             "MonteCarloFromGEN" : ["/store/backfill/1", "/store/backfill/2", "/store/mc"],
+             "ReReco" : ["/store/backfill/1", "/store/backfill/2", "/store/data", "/store/hidata"],
+             "DataProcessing" : ["/store/backfill/1", "/store/backfill/2", "/store/data", "/store/hidata"],
+             "ReDigi" : ["/store/backfill/1", "/store/backfill/2", "/store/data", "/store/mc", "/store/himc"],
+             "MonteCarlo" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/himc"],
+             "RelValMC" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/himc"],
+             "Resubmission" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/data", "/store/hidata"],
+             "MonteCarloFromGEN" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/himc"],
              "TaskChain": ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/data", "/store/relval"],
              "LHEStepZero": ["/store/backfill/1", "/store/backfill/2", "/store/generator"]}
 
@@ -111,17 +108,17 @@ class Assign(WebAPI):
         dashboardActivity = helper.getDashboardActivity()
 
         (reqMergedBase, reqUnmergedBase) = helper.getLFNBases()
-        return self.templatepage("Assign", requests=[request], teams=teams, 
+        return self.templatepage("Assign", requests=[request], teams=teams,
                                  assignments=assignments, sites=self.sites,
                                  mergedLFNBases=self.mergedLFNBases[requestType],
                                  reqMergedBase=reqMergedBase,
                                  unmergedLFNBases=self.allUnmergedLFNBases,
                                  reqUnmergedBase=reqUnmergedBase,
-                                 acqEra = acqEra, procVer = procVer, 
+                                 acqEra = acqEra, procVer = procVer,
                                  dashboardActivity=dashboardActivity,
                                  badRequests=[])
 
-    @cherrypy.expose    
+    @cherrypy.expose
     @cherrypy.tools.secmodv2(role=ReqMgrAuth.assign_roles)
     def index(self, all=0):
         """ Main page """
@@ -166,12 +163,13 @@ class Assign(WebAPI):
                                  reqMergedBase=reqMergedBase,
                                  unmergedLFNBases=self.allUnmergedLFNBases,
                                  reqUnmergedBase=reqUnmergedBase,
-                                 acqEra = acqEra, procVer = procVer, 
+                                 acqEra = acqEra, procVer = procVer,
                                  dashboardActivity=dashboardActivity,
                                  badRequests=badRequestNames)
 
     @cherrypy.expose
-    @cherrypy.tools.secmodv2(role=ReqMgrAuth.assign_roles)
+    #@cherrypy.tools.secmodv2(role=ReqMgrAuth.assign_roles) security issue fix
+    @cherrypy.tools.secmodv2(role=Utilities.security_roles(), group = Utilities.security_groups())
     def handleAssignmentPage(self, **kwargs):
         """ handler for the main page """
         #Accept Json encoded strings
@@ -195,10 +193,10 @@ class Assign(WebAPI):
                 requestName = key[8:]
                 self.validate(requestName)
                 requestNames.append(key[8:])
-        
+
         for requestName in requestNames:
             if kwargs['action'] == 'Reject':
-                ChangeState.changeRequestStatus(requestName, 'rejected', wmstatUrl = self.wmstatWriteURL) 
+                ChangeState.changeRequestStatus(requestName, 'rejected', wmstatUrl = self.wmstatWriteURL)
             else:
                 assignments = GetRequest.getAssignmentsByName(requestName)
                 if teams == [] and assignments == []:
@@ -211,18 +209,6 @@ class Assign(WebAPI):
                 if priority != '':
                     Utilities.changePriority(requestName, priority, self.wmstatWriteURL)
         participle=kwargs['action']+'ed'
-        if self.opshold and kwargs['action'] == 'Assign':
-            participle='put into "ops-hold" state (see <a href="%s">OpsClipboard</a>)' % self.clipboardUrl
-            # this, previously used, call made all requests injected into OpsClipboard to
-            # have campaign_id null since the call doesn't propagate request's 
-            # CampaignName at all, AcquisitionEra remains default null and probably
-            # a bunch of other things is wrong too
-            #requests = [GetRequest.getRequestByName(requestName) for requestName in requestNames]
-            requests = [Utilities.requestDetails(requestName) for requestName in requestNames]
-            OpsClipboard.inject(self.couchUrl, self.clipboardDB, *requests)
-            for request in requestNames:
-                ChangeState.changeRequestStatus(requestName, 'ops-hold', wmstatUrl = self.wmstatWriteURL)
-
         return self.templatepage("Acknowledge", participle=participle, requests=requestNames)
 
 
@@ -257,6 +243,25 @@ class Assign(WebAPI):
                                           int(kwargs.get("SoftTimeout", 171600)),
                                           int(kwargs.get("GracePeriod", 300)))
 
+        # Check whether we should check location for the data
+        if "useSiteListAsLocation" in kwargs:
+            helper.setLocationDataSourceFlag()
+
+        # Set phedex subscription information
+        custodialList = kwargs.get("CustodialSites", [])
+        nonCustodialList = kwargs.get("NonCustodialSites", [])
+        if "AutoApprove" in kwargs:
+            autoApproveList = nonCustodialList
+        else:
+            autoApproveList = []
+        priority = kwargs.get("Priority", "Low")
+        if priority not in ["Low", "Normal", "High"]:
+            raise cherrypy.HTTPError(400, "Invalid subscription priority")
+
+        helper.setSubscriptionInformationWildCards(wildcardDict = self.wildcardSites,
+                                                   custodialSites = custodialList,
+                                                   nonCustodialSites = nonCustodialList,
+                                                   autoApproveSites = autoApproveList,
+                                                   priority = priority)
         helper.setDashboardActivity(kwargs.get("dashboard", ""))
         Utilities.saveWorkload(helper, request['RequestWorkflow'], self.wmstatWriteURL)
-

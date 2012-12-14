@@ -12,7 +12,7 @@ class Transitions(dict):
     def __init__(self):
         self.setdefault('none', ['new'])
         self.setdefault('new', ['created', 'createfailed', 'killed'])
-        self.setdefault('created', ['executing', 'submitfailed', 'killed'])
+        self.setdefault('created', ['executing', 'submitfailed', 'createfailed', 'killed'])
         self.setdefault('executing', ['complete', 'jobfailed', 'killed'])
         self.setdefault('complete', ['asopending','jobfailed', 'success'])
         self.setdefault('createfailed', ['createcooloff', 'exhausted', 'killed'])
@@ -27,7 +27,7 @@ class Transitions(dict):
         self.setdefault('exhausted', ['cleanout'])
         self.setdefault('killed', ['cleanout', 'killed'])
         self.setdefault('jobpaused', ['created', 'killed'])
-        self.setdefault('createpaused', ['new', 'killed'])
+        self.setdefault('createpaused', ['created', 'killed'])
         self.setdefault('submitpaused', ['created', 'killed'])
         self.setdefault('asopaused', ['created', 'killed'])
         self.setdefault('asopending', ['asofailed','complete','killed'])
@@ -36,7 +36,7 @@ class Transitions(dict):
     def states(self):
         """
         _states_
-        
+
         Return a list of all known states, derive it in case we add new final
         states other than cleanout.
         """

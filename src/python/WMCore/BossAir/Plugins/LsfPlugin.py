@@ -36,7 +36,8 @@ class LsfPlugin(BasePlugin):
         For a given name, return a global state
 
         """
-        stateDict = {'PEND': 'Pending',
+        stateDict = {'New':  'Pending',
+                     'PEND': 'Pending',
                      'PSUSP': 'Pending',
                      'WAIT': 'Pending',
                      'RUN': 'Running',
@@ -45,7 +46,8 @@ class LsfPlugin(BasePlugin):
                      'DONE': 'Complete',
                      'EXIT': 'Error',
                      'UNKWN': 'Error',
-                     'ZOMBI': 'Error'}
+                     'ZOMBI': 'Error',
+                     'Timeout' : 'Error'}
 
         return stateDict
 
@@ -173,8 +175,8 @@ class LsfPlugin(BasePlugin):
                     p = subprocess.Popen(command, shell = True,
                                          stdout = subprocess.PIPE,
                                          stderr = subprocess.STDOUT)
-                    
-                    stdout = p.communicate()[0] 
+
+                    stdout = p.communicate()[0]
                     returncode = p.returncode
 
                     if returncode == 0:
@@ -188,13 +190,13 @@ class LsfPlugin(BasePlugin):
                             continue
                         else:
                             logging.error("bsub didn't return a valid Job ID. Job is not submitted")
-                            logging.error(stdout)    
+                            logging.error(stdout)
 
                     lsfErrorReport = Report()
                     lsfErrorReport.addError("JobSubmit", 61202, "LsfError", stdout)
                     job['fwjr'] = lsfErrorReport
                     failedJobs.append(job)
-                    
+
         # We must return a list of jobs successfully submitted,
         # and a list of jobs failed
         return successfulJobs, failedJobs

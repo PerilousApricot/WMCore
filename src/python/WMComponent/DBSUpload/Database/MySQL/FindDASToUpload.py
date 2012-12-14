@@ -44,24 +44,32 @@ class FindDASToUpload(DBFormatter):
             if r == {}:
                 continue
             entry={}
-            entry['Path']=r['path']
+
             entry['DAS_ID'] = long(r['das_id'])
+
             if not r['algo'] == None:
                 entry['Algo'] = int(r['algo'])
             else:
                 entry['Algo'] = None
+
             if not r['in_dbs'] == None:
                 entry['DASInDBS'] = int(r['in_dbs'])
             else:
                 entry['DASInDBS'] = None
+
+            # insert for upstream users
+            entry['AlgoInDBS'] = None
+
             path = r['path']
+            entry['Path']               = r['path']
             entry['PrimaryDataset']     = path.split('/')[1]
             entry['ProcessedDataset']   = path.split('/')[2]
             entry['DataTier']           = path.split('/')[3]
             entry['Dataset']            = r['dataset']
             entry['ValidStatus']        = r['valid_status']
-            entry['GlobalTag']          = r.get('global_tag', '')
-            entry['Parent']             = r.get('parent', '')
+            entry['GlobalTag']          = r['global_tag']
+            entry['Parent']             = r['parent']
+
             ret.append(entry)
 
         return ret
@@ -71,5 +79,5 @@ class FindDASToUpload(DBFormatter):
 
         result = self.dbi.processData(self.sql, binds = {}, conn = conn,
                                       transaction = transaction)
-        
+
         return self.makeDAS(self.formatDict(result))

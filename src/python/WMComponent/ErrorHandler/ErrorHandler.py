@@ -54,4 +54,3 @@ class ErrorHandler(Harness):
         pollInterval = self.config.ErrorHandler.pollInterval
         logging.info("Setting poll interval to %s seconds" % pollInterval)
         myThread.workerThreadManager.addWorker(ErrorHandlerPoller(self.config), pollInterval)
-

@@ -500,6 +500,8 @@ class SetupCMSSWPset(ScriptInterface):
 
     def handleProducersNumberOfEvents(self):
         """
+        _handleProducersNumberOfEvents_
+
         Some producer modules are initialized with a maximum number of events
         to be generated, usually based on the process.maxEvents.input attribute
         but after that is tweaked the producers number of events need to
@@ -511,6 +513,22 @@ class SetupCMSSWPset(ScriptInterface):
             if hasattr(producers[producer], "nEvents"):
                 producers[producer].nEvents = cms.uint32(
                                         self.process.maxEvents.input.value())
+
+    def handleDQMFileSaver(self):
+        """
+        _handleDQMFileSaver_
+
+        Harvesting jobs have the dqmFileSaver EDAnalyzer that must
+        be tweaked with the dataset name in order to store it
+        properly in the DQMGUI, others tweaks can be added as well
+        """
+        if hasattr(self.process, "dqmSaver"):
+            if hasattr(self.step.data.application.configuration, "pickledarguments"):
+                args = pickle.loads(self.step.data.application.configuration.pickledarguments)
+                datasetName = args.get('datasetName', None)
+                if datasetName is not None:
+                    self.process.dqmSaver.workflow = cms.untracked.string(datasetName)
+        return
 
     def __call__(self):
         """
@@ -590,6 +608,9 @@ class SetupCMSSWPset(ScriptInterface):
         # check for event numbers in the producers
         self.handleProducersNumberOfEvents()
 
+        # fixup the dqmFileSaver
+        self.handleDQMFileSaver()
+
         #Apply events per lumi section if available
         if hasattr(self.step.data.application.configuration, "eventsPerLumi"):
             self.process.source.numberEventsInLuminosityBlock = \
@@ -611,18 +632,23 @@ class SetupCMSSWPset(ScriptInterface):
                         cms.untracked.string("trivialcatalog_file:/uscmst1/prod/sw/cms/SITECONF/T1_US_FNAL/PhEDEx/storage-test.xml?protocol=dcap")
 
         configFile = self.step.data.application.command.configuration
+        configPickle = getattr(self.step.data.application.command, "configurationPickle", "PSet.pkl")
         workingDir = self.stepSpace.location
         handle = open("%s/%s" % (workingDir, configFile), 'w')
+        pHandle = open("%s/%s" % (workingDir, configPickle), 'wb')
         try:
+            pickle.dump(self.process, pHandle)
             handle.write("import FWCore.ParameterSet.Config as cms\n")
             handle.write("import pickle\n")
-            handle.write('process = pickle.loads("""')
-            handle.write(pickle.dumps(self.process))
-            handle.write('""")\n')
+            handle.write("handle = open('%s', 'rb')\n" % configPickle)
+            handle.write("process = pickle.load(handle)\n")
+            handle.write("handle.close()\n")
         except Exception, ex:
             print "Error writing out PSet:"
             print traceback.format_exc()
             raise ex
+        finally:
+            handle.close()
+            pHandle.close()
 
-        handle.close()
         return 0

@@ -21,19 +21,19 @@ class _Registry:
     _Makers = {}
     _Schemas = {}
     _Factories = {}
-    
+
     def __init__(self):
         msg = "Do not init ths class"
         raise RuntimeError, msg
 
-    
+
 
 def registerRequestType(typename, makerClass, schemaClass):
     """
     _registerRequestType_
 
     Register a request type with its maker class and schema class
-    
+
     """
     _Registry._Makers[typename] = makerClass
     _Registry._Schemas[typename] = schemaClass
@@ -47,7 +47,7 @@ def retrieveRequestMaker(typename):
     _retrieveRequestMaker_
 
     Retrieve a request maker instance for the named type.
-    
+
     """
     if not _Registry._Makers.has_key(typename):
         print _Registry._Makers.keys()
@@ -65,7 +65,7 @@ def retrieveRequestMaker(typename):
 def buildWorkloadForRequest(typename, schema):
     """
     _buildWorkloadForRequest_
-    
+
     Prototype master class for ReqMgr request creation
 
     Should load factory, use the schema to find arguments,
@@ -89,8 +89,6 @@ def buildWorkloadForRequest(typename, schema):
     else:
         factoryInstance = _Registry._Factories[typename]
 
-
-
     # So now we have a factory
     # Time to run it
     # Any exception here will be caught at a higher level (ReqMgrWebTools)
@@ -98,7 +96,7 @@ def buildWorkloadForRequest(typename, schema):
     factory  = factoryInstance()
     workload = factory.factoryWorkloadConstruction(workloadName = requestName,
                                                    arguments = schema)
-    
+
     # Now build a request
     request = Request()
     request.update(schema)
@@ -107,7 +105,14 @@ def buildWorkloadForRequest(typename, schema):
     # use the CMSSWVersion from the input schema only if it's defined (like
     # for a new request). for example for a resubmission request, schema['CMSSWVersion']
     # is empty and will be worked out later ; do not use any defaults
-    if schema.get('CMSSWVersion'):
+    # TODO:
+    # all these fiddling along the route of creating the request should be concentrated
+    #    at single place! Otherwise implementation of things like request cloning is
+    #    unnecessary complicated for there is a lot hidden manipulations
+    #    for for cloning - do this only if it's not defined already!
+    #    seeing what is written above about resubmission, not sure if for resubmission
+    #    this is not now screwed up
+    if schema.get('CMSSWVersion') and schema.get('CMSSWVersion') not in request['SoftwareVersions']:
         request['SoftwareVersions'].append(schema.get('CMSSWVersion'))
     # assume only one dbs for all the task
     request['DbsUrl'] = (workload.getTopLevelTask()[0]).dbsUrl()
@@ -138,7 +143,7 @@ def loadRequestSchema(workload, requestSchema):
                 pass
     schema.timeStamp = int(time.time())
     schema = workload.data.request.schema
-    
+
     # might belong in another method to apply existing schema
     workload.data.owner.Group = schema.Group
     workload.data.owner.Requestor = schema.Requestor

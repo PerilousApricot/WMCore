@@ -30,7 +30,8 @@ class Approve(BulkOperations):
                                   requests=requests)
 
     @cherrypy.expose
-    @cherrypy.tools.secmodv2()
+    #@cherrypy.tools.secmodv2() security issue fix
+    @cherrypy.tools.secmodv2(role=Utilities.security_roles(), group = Utilities.security_groups())    
     def handleApprove(self, **kwargs):
         """ Handler for approving requests """
         requests = self.requestNamesFromCheckboxes(kwargs)
@@ -45,6 +46,5 @@ class Approve(BulkOperations):
             priority = kwargs.get(requestName+':priority', '')
             if priority != '':
                 Utilities.changePriority(requestName, priority, self.wmstatWriteURL)
-        return self.templatepage("Acknowledge", participle=participle, 
+        return self.templatepage("Acknowledge", participle=participle,
                                  requests=requests)
-

@@ -61,7 +61,6 @@ dbsBlockTimeout = 86400
 # Job retry information.  This includes the number of times a job will tried and
 # how long it will sit in cool off.
 maxJobRetries = 3
-retryAlgo = "SquaredAlgo"
 retryAlgoParams = {"create": 5000, "submit": 5000, "job": 5000}
 
 # The amount of time to wait after a workflow has completed before archiving it.
@@ -149,7 +148,8 @@ config.PhEDExInjector.namespace = "WMComponent.PhEDExInjector.PhEDExInjector"
 config.PhEDExInjector.componentDir = config.General.workDir + "/PhEDExInjector"
 config.PhEDExInjector.logLevel = globalLogLevel
 config.PhEDExInjector.maxThreads = 1
-config.PhEDExInjector.subscribeMSS = True
+config.PhEDExInjector.subscribeDatasets = True
+config.PhEDExInjector.safeOperationMode = False
 config.PhEDExInjector.phedexurl = "https://cmsweb.cern.ch/phedex/datasvc/json/prod/"
 config.PhEDExInjector.pollInterval = 100
 config.PhEDExInjector.subscribeInterval = 43200
@@ -160,6 +160,7 @@ config.JobAccountant.componentDir = config.General.workDir + "/JobAccountant"
 config.JobAccountant.logLevel = globalLogLevel
 config.JobAccountant.workerThreads = 1
 config.JobAccountant.pollInterval = 60
+config.JobAccountant.specDir = config.General.workDir + "/JobAccountant/SpecCache"
 
 config.component_("JobCreator")
 config.JobCreator.namespace = "WMComponent.JobCreator.JobCreator"
@@ -210,8 +211,10 @@ config.RetryManager.namespace = "WMComponent.RetryManager.RetryManager"
 config.RetryManager.componentDir  = config.General.workDir + "/RetryManager"
 config.RetryManager.logLevel = globalLogLevel
 config.RetryManager.pollInterval = 240
-config.RetryManager.coolOffTime = retryAlgoParams
-config.RetryManager.pluginName = retryAlgo
+config.RetryManager.plugins = {"default" : "SquaredAlgo"}
+config.RetryManager.section_("SquaredAlgo")
+config.RetryManager.SquaredAlgo.section_("default")
+config.RetryManager.SquaredAlgo.default.coolOffTime = retryAlgoParams
 
 config.component_("JobArchiver")
 config.JobArchiver.namespace = "WMComponent.JobArchiver.JobArchiver"
@@ -238,8 +241,14 @@ config.TaskArchiver.requireCouch  = True
 config.TaskArchiver.uploadPublishInfo = False
 config.TaskArchiver.uploadPublishDir  = None
 config.TaskArchiver.userFileCacheURL = 'http://USERFILECACHEHOST:UFCPORT/userfilecache/'
-# set to False couch data will be deleted from CleanUpManager
-config.TaskArchiver.deleteCouchData = False
+# set to False couch data if request mgr is not used (Tier0, PromptSkiming)
+config.TaskArchiver.useReqMgrForCompletionCheck = True
+config.TaskArchiver.localCouchURL = "%s/%s" % (config.JobStateMachine.couchurl,  config.JobStateMachine.couchDBName)
+config.TaskArchiver.localQueueURL = "%s/%s" % (config.WorkQueueManager.couchurl, config.WorkQueueManager.dbname)
+config.TaskArchiver.localWMStatsURL = "%s/%s" % (config.JobStateMachine.couchurl, config.JobStateMachine.jobSummaryDBName)
+config.TaskArchiver.centralWMStatsURL = "Central WMStats URL"
+config.TaskArchiver.DataKeepDays = 1 # delete after a day maybe change to a week
+config.TaskArchiver.cleanCouchInterval = 60 * 20 # 20 min
 
 config.webapp_('WMBSService')
 config.WMBSService.default_expires = 0
@@ -471,15 +480,5 @@ config.AnalyticsDataCollector.localQueueURL = "%s/%s" % (config.WorkQueueManager
 config.AnalyticsDataCollector.localWMStatsURL = "%s/%s" % (config.JobStateMachine.couchurl, config.JobStateMachine.jobSummaryDBName)
 config.AnalyticsDataCollector.centralWMStatsURL = "Central WMStats URL"
 config.AnalyticsDataCollector.summaryLevel = "task"
-
-config.component_("CleanUpManager")
-config.CleanUpManager.namespace = "WMComponent.CleanUpManager.CleanUpManager"
-config.CleanUpManager.componentDir  = config.General.workDir + "/CleanUpManager"
-config.CleanUpManager.logLevel = globalLogLevel
-config.CleanUpManager.localCouchURL = "%s/%s" % (config.JobStateMachine.couchurl,  config.JobStateMachine.couchDBName)
-config.CleanUpManager.localQueueURL = "%s/%s" % (config.WorkQueueManager.couchurl, config.WorkQueueManager.dbname)
-config.CleanUpManager.localWMStatsURL = "%s/%s" % (config.JobStateMachine.couchurl, config.JobStateMachine.jobSummaryDBName)
-config.CleanUpManager.centralWMStatsURL = "Central WMStats URL"
-config.CleanUpManager.DataKeepDays = 1 # delete after a day maybe change to a week
-config.CleanUpManager.cleanCouchInterval = 60 * 20 # 20 min
+config.AnalyticsDataCollector.pluginName = None
 

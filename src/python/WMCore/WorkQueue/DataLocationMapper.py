@@ -20,7 +20,7 @@ def isGlobalDBS(dbs):
     """Is this the global dbs"""
     try:
         # try to determine from name - save a trip to server
-        # fragile but if this url changes many other things will break also...    
+        # fragile but if this url changes many other things will break also...
         from urlparse import urlparse
         url = urlparse(dbs.dbs.getServerUrl()) #DBSApi has url not DBSReader
         if url.hostname.startswith('cmsdbsprod.cern.ch') and url.path.startswith('/cms_dbs_prod_global'):
@@ -166,6 +166,8 @@ class WorkQueueDataLocationMapper(DataLocationMapper):
             for data, locations in dataMapping.items():
                 elements = self.backend.getElementsForData(dbs, data)
                 for element in elements:
+                    if element.get('NoLocationUpdate', False):
+                        continue
                     if sorted(locations) != sorted(element['Inputs'][data]):
                         if fullResync:
                             self.logger.info(data + ': Setting locations to: ' + ', '.join(locations))
@@ -192,6 +194,8 @@ class WorkQueueDataLocationMapper(DataLocationMapper):
             for data, locations in dataMapping.items():
                 elements = self.backend.getElementsForParentData(data)
                 for element in elements:
+                    if element.get('NoLocationUpdate', False):
+                        continue
                     for pData in element['ParentData']:
                         if pData == data:
                             if sorted(locations) != sorted(element['ParentData'][pData]):

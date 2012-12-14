@@ -184,7 +184,7 @@ class StageOutMgr:
         if not self.override:
             print "===> Attempting Local Stage Out."
             try:
-                pfn = self.localStageOut(lfn, fileToStage['PFN'])
+                pfn = self.localStageOut(lfn, fileToStage['PFN'], fileToStage.get('Checksums'))
                 fileToStage['PFN'] = pfn
                 fileToStage['SEName'] = self.siteCfg.localStageOut['se-name']
                 fileToStage['StageOutCommand'] = self.siteCfg.localStageOut['command']
@@ -209,7 +209,7 @@ class StageOutMgr:
         for fallback in self.fallbacks:
             try:
                 pfn = self.fallbackStageOut(lfn, fileToStage['PFN'],
-                                            fallback)
+                                            fallback, fileToStage.get('Checksums'))
                 fileToStage['PFN'] = pfn
                 fileToStage['SEName'] = fallback['se-name']
                 fileToStage['StageOutCommand'] = fallback['command']
@@ -219,14 +219,14 @@ class StageOutMgr:
                     del self.failed[lfn]
 
                 print "===> Stage Out Successful: %s" % fileToStage
-                return fileToStage                        
+                return fileToStage
             except Exception, ex:
                 lastException = ex
                 continue
 
         raise lastException
 
-    def fallbackStageOut(self, lfn, localPfn, fbParams):
+    def fallbackStageOut(self, lfn, localPfn, fbParams, checksums):
         """
         _fallbackStageOut_
 
@@ -255,7 +255,7 @@ class StageOutMgr:
         impl.retryPause = self.retryPauseTime
 
         try:
-            impl(fbParams['command'], localPfn, pfn, fbParams.get("option", None))
+            impl(fbParams['command'], localPfn, pfn, fbParams.get("option", None), checksums)
         except Exception, ex:
             msg = "Failure for fallback stage out:\n"
             msg += str(ex)
@@ -265,7 +265,7 @@ class StageOutMgr:
 
         return pfn
 
-    def localStageOut(self, lfn, localPfn):
+    def localStageOut(self, lfn, localPfn, checksums):
         """
         _localStageOut_
 
@@ -294,7 +294,7 @@ class StageOutMgr:
         impl.retryPause = self.retryPauseTime
 
         try:
-            impl(protocol, localPfn, pfn, options)
+            impl(protocol, localPfn, pfn, options, checksums)
         except Exception, ex:
             msg = "Failure for local stage out:\n"
             msg += str(ex)
@@ -369,8 +369,3 @@ class StageOutMgr:
         msg += "LFN: %s\nPFN: %s\n" % (lfn, pfn)
         print msg
         return pfn
-
-
-
-
-

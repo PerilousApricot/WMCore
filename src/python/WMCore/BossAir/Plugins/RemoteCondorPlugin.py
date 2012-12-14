@@ -1,9 +1,8 @@
-#!/usr/bin/env python
 """
-_CondorPlugin_
+WMCore.BossAir.Plugins.RemoteCondor - 
+    Hooks up to rcondor for local glidein testing
 
-Example of Condor plugin
-For glide-in use.
+Created by Andrew Melo <andrew.melo@gmail.com> on Oct 9, 2012
 """
 
 import os
@@ -12,6 +11,8 @@ import time
 import Queue
 import os.path
 import logging
+import hashlib
+import commands
 import threading
 import traceback
 import subprocess
@@ -70,27 +71,30 @@ def submitWorker(input, results, timeout = None):
         command = work.get('command', None)
         idList  = work.get('idList', [])
         if not command:
-            results.put({'stdout': '', 'stderr': '999100\n Got no command!', 'idList': idList})
+            results.put({'stdout': '', 'stderr': '999100\n Got no command!', 'idList': idList, 'command' : command})
             continue
 
         try:
+            print "executing command %s" % command
             stdout, stderr, returnCode = SubprocessAlgos.runCommand(cmd = command, shell = True, timeout = timeout)
+            print "stdout %s" % stdout
+            print "stderr %s" % stderr
             if returnCode == 0:
-                results.put({'stdout': stdout, 'stderr': stderr, 'idList': idList, 'exitCode': returnCode})
+                results.put({'stdout': stdout, 'stderr': stderr, 'idList': idList, 'exitCode': returnCode, 'command' : command})
             else:
                 results.put({'stdout': stdout,
                              'stderr': 'Non-zero exit code: %s\n stderr: %s' % (returnCode, stderr),
                              'exitCode': returnCode,
-                             'idList': idList})
+                             'idList': idList,
+                             'command' : command})
         except Exception, ex:
             msg =  "Critical error in subprocess while submitting to condor"
             msg += str(ex)
             msg += str(traceback.format_exc())
             logging.error(msg)
-            results.put({'stdout': '', 'stderr': '999101\n %s' % msg, 'idList': idList, 'exitCode': 999101})
+            results.put({'stdout': '', 'stderr': '999101\n %s' % msg, 'idList': idList, 'exitCode': 999101, 'command' : command})
 
     return 0
-
 
 def parseError(error):
     """
@@ -119,15 +123,11 @@ def parseError(error):
 
     return errorCondition, errorMsg
 
-
-
-
-
-class CondorPlugin(BasePlugin):
+class RemoteCondorPlugin(BasePlugin):
     """
-    _CondorPlugin_
+    _RemoteCondorPlugin_
 
-    Condor plugin for glide-in submissions
+    Remote Condor plugin for glide-in submissions
     """
 
     @staticmethod
@@ -206,6 +206,8 @@ class CondorPlugin(BasePlugin):
         self.glexecPath  = getattr(config.BossAir, 'glexecPath', None)
         self.glexecWrapScript = getattr(config.BossAir, 'glexecWrapScript', None)
         self.glexecUnwrapScript = getattr(config.BossAir, 'glexecUnwrapScript', None)
+        self.gsisshOptions = ["-o", "ForwardX11=no"]
+        self.remoteUserHost = "se2.accre.vanderbilt.edu"
         self.jdlProxyFile    = None # Proxy name to put in JDL (owned by submit user)
         self.glexecProxyFile = None # Copy of same file owned by submit user
 
@@ -236,7 +238,11 @@ class CondorPlugin(BasePlugin):
         if hasattr(config.BossAir, 'condorRequirementsString'):
             self.reqStr = config.BossAir.condorRequirementsString
 
-        return
+        # for testing
+        #  this should be gsissh or gsiscp
+        self.ssh = 'ssh'
+        self.scp = 'scp'
+        self.remoteSubdir = "bossair"
 
 
     def __del__(self):
@@ -246,7 +252,6 @@ class CondorPlugin(BasePlugin):
         Trigger a close of connections if necessary
         """
         self.close()
-
 
     def setupMyProxy(self):
         """
@@ -266,7 +271,6 @@ class CondorPlugin(BasePlugin):
         args['logger'] = logging
         return Proxy(args = args)
 
-
     def close(self):
         """
         _close_
@@ -274,7 +278,7 @@ class CondorPlugin(BasePlugin):
         Kill all connections and terminate
         """
         terminate = False
-        for x in self.pool:
+        for _ in self.pool:
             try:
                 self.input.put('STOP')
             except Exception, ex:
@@ -313,8 +317,174 @@ class CondorPlugin(BasePlugin):
         self.result = None
         return
 
+    def checkAndStartPool(self, timeout):
+        if len(self.pool) == 0:
+            # Starting things up
+            # This is obviously a submit API
+            logging.info("Starting up RemoteCondorPlugin worker pool")
+            self.input    = multiprocessing.Queue()
+            self.result   = multiprocessing.Queue()
+            for _ in range(self.nProcess):
+                p = multiprocessing.Process(target = submitWorker,
+                                            args = (self.input, self.result, timeout))
+                p.start()
+                self.pool.append(p)
+    
+    def getSubmissionDict(self, jobs): 
+        # Now assume that what we get is the following; a mostly
+        # unordered list of jobs with random sandboxes.
+        # We intend to sort them by userDN and sandbox.
 
+        submitDict = {'nodn': {}}
+        for job in jobs:
+            userdn = job.get('userdn', 'nodn')
+            if not userdn in submitDict.keys():
+                submitDict[userdn] = {}
+                
+            sandbox = job['sandbox']
+            if not sandbox in submitDict[userdn].keys():
+                submitDict[userdn][sandbox] = []
+            submitDict[userdn][sandbox].append(job)
+            
+        return submitDict
 
+    def getWrapEnv(self):
+        wrapper = ""
+        if self.glexecPath:
+            if self.glexecWrapScript:
+                wrapper += 'export GLEXEC_ENV=`%s 2>/dev/null`; ' % self.glexecWrapScript
+            wrapper += 'export GLEXEC_CLIENT_CERT=%s; ' % self.glexecProxyFile
+            wrapper += 'export GLEXEC_SOURCE_PROXY=%s; ' % self.glexecProxyFile
+            wrapper += 'export X509_USER_PROXY=%s; ' % self.glexecProxyFile
+            wrapper += 'export GLEXEC_TARGET_PROXY=%s; ' % self.jdlProxyFile
+        return wrapper
+
+    def getCommandWrapper(self):
+        wrapper = ""
+        if self.glexecPath:
+            if self.glexecUnwrapScript:
+                wrapper += '%s %s -- ' % (self.glexecPath, self.glexecUnwrapScript)
+            else:
+                wrapper += '%s ' % (self.glexecPath, )
+        else:
+            wrapper = ' '        
+        return wrapper
+    
+    def makeMkdirCommand(self, targetDirs):
+        wrapper = self.getCommandWrapper()
+        
+        wrapssh = "%s %s %s" % (wrapper, self.ssh, " ".join(self.gsisshOptions))
+
+        # make sure there's a condor work directory on remote host
+        command = "%s %s " % (wrapssh, self.remoteUserHost)
+        command += " mkdir -p %s" % (" ".join(targetDirs))
+        return command      
+    
+    def makeScpOutwardCommand(self, targetFiles):
+        wrapper = self.getCommandWrapper()
+        
+        wrapscp = "%s %s %s" % (wrapper, self.scp, " ".join(self.gsisshOptions))
+        commands = []
+        for onefile in targetFiles:
+            assert os.path.exists( onefile[0] )
+            commands.append('%s %s %s:%s' % \
+                            (wrapscp, onefile[0], self.remoteUserHost, onefile[1]))
+
+        return ' && '.join(commands)
+    
+    def makeScpInwardCommand(self, targetFiles):
+        wrapper = self.getCommandWrapper()
+        
+        wrapscp = "%s %s %s" % (wrapper, self.scp, " ".join(self.gsisshOptions))
+        commands = []
+        for onefile in targetFiles:
+            commands.append('%s %s:%s %s' % \
+                            (wrapscp, self.remoteUserHost, onefile[0], onefile[1]))
+
+        return ' && '.join(commands)    
+    
+    def makeSubmitCommand(self, remoteJDL):
+        wrapper = self.getCommandWrapper()
+        
+        wrapssh = "%s %s %s" % (wrapper, self.ssh, " ".join(self.gsisshOptions))
+        command = "%s %s " % (wrapssh, self.remoteUserHost)
+        command += "condor_submit %s" % remoteJDL
+
+        return command
+    
+    def enqueueCommand(self, command, idList):
+        try:
+            self.input.put({'command': command, 'idList': idList})
+        except AssertionError, ex:
+            msg =  "Critical error: input pipeline probably closed.\n"
+            msg += str(ex)
+            msg += "Error Procedure: Something critical has happened in the worker process\n"
+            msg += "We will now proceed to pull all useful data from the queue (if it exists)\n"
+            msg += "Then refresh the worker pool\n"
+            logging.error(msg)
+            return False
+        except Exception, ex:
+            msg += str(ex)
+            msg += "Error Procedure: Something critical has happened in the worker process\n"
+            msg += "We will now proceed to pull all useful data from the queue (if it exists)\n"
+            msg += "Then refresh the worker pool\n"
+            logging.error(msg)
+            return False            
+        return True
+
+    def collapseFilesForJobs(self, jobs, inputPrefix):
+        """
+        collapseFilesForJobs - 
+            makes a list of directories, a dict of local->remote file mappings
+            
+            to minimize transferring the same files for every job, we make
+            a remote directory structure like:
+            
+            bossair/<last 3 chars of request time>/<request time>/input/<md5 hash>/<name of file>
+            
+            That directory structure is passed to condor with transfer_input_files
+            self.jdlProxyFile.
+                        
+            jdl.append("transfer_input_files = %s, %s/%s, %s\n" \
+              % (job['sandbox'], job['packageDir'],
+                 'JobPackage.pkl', self.unpacker))
+        """
+
+        requiredDirs    = [inputPrefix]
+        requiredFiles   = []
+        localToRemote   = {}
+        localToHash     = {}
+        hashToRemote    = {}
+        
+        for job in jobs:
+            job['remoteFiles'] = []
+            for onefile in (job['sandbox'],
+                         "%s/%s" % (job['packageDir'], 'JobPackage.pkl'),
+                         self.unpacker):
+                
+                if not onefile.startswith('/'):
+                    onefile = job['cacheDir'] + '/' + onefile
+                    
+                if onefile not in localToHash:
+                    hasher = hashlib.sha256()
+                    hasher.update( open(onefile, 'r').read() )
+                    localToHash[onefile] = hasher.hexdigest()
+                
+                if localToHash[onefile] not in hashToRemote:
+                    remoteDir  = "%s/%s" % (inputPrefix, localToHash[onefile])
+                    remoteFile = "%s/%s" % (remoteDir, os.path.basename(onefile))
+                    requiredDirs.append( remoteDir )
+                    requiredFiles.append( (onefile, remoteFile ) )
+                    hashToRemote[localToHash[onefile]] = remoteFile
+                    
+                if onefile not in localToRemote:
+                    localToRemote[onefile] = hashToRemote[localToHash[onefile]]
+                    
+                job['remoteFiles'].append( localToRemote[onefile] )
+        
+        requiredDirs.sort()
+        return requiredDirs, requiredFiles, inputPrefix
+        
     def submit(self, jobs, info):
         """
         _submit_
@@ -322,105 +492,123 @@ class CondorPlugin(BasePlugin):
 
         Submit jobs for one subscription
         """
+        if len(jobs) == 0:
+            # Then was have nothing to do
+            return [], []
 
-        # If we're here, then we have submitter components
+        # If we're here, then we have submitter components. Initialize our working lists
         self.scriptFile = self.config.JobSubmitter.submitScript
         self.submitDir  = self.config.JobSubmitter.submitDir
         timeout         = getattr(self.config.JobSubmitter, 'getTimeout', 400)
-
-        successfulJobs = []
-        failedJobs     = []
-        jdlFiles       = []
-
-        if len(jobs) == 0:
-            # Then was have nothing to do
-            return successfulJobs, failedJobs
-
-        if len(self.pool) == 0:
-            # Starting things up
-            # This is obviously a submit API
-            logging.info("Starting up CondorPlugin worker pool")
-            self.input    = multiprocessing.Queue()
-            self.result   = multiprocessing.Queue()
-            for x in range(self.nProcess):
-                p = multiprocessing.Process(target = submitWorker,
-                                            args = (self.input, self.result, timeout))
-                p.start()
-                self.pool.append(p)
-
+        jdlFiles        = []        
+        submitDict      = self.getSubmissionDict( jobs )
+        nSubmits        = 0
+        
         if not os.path.exists(self.submitDir):
             os.makedirs(self.submitDir)
 
+        self.checkAndStartPool( timeout )
 
-        # Now assume that what we get is the following; a mostly
-        # unordered list of jobs with random sandboxes.
-        # We intend to sort them by sandbox.
-
-        submitDict = {}
-        nSubmits   = 0
-        for job in jobs:
-            sandbox = job['sandbox']
-            if not sandbox in submitDict.keys():
-                submitDict[sandbox] = []
-            submitDict[sandbox].append(job)
-
-
-        # Now submit the bastards
+        # Now submit the bastards, but do it per-DN and per-sandbox
         queueError = False
-        for sandbox in submitDict.keys():
-            jobList = submitDict.get(sandbox, [])
-            idList = [x['jobid'] for x in jobList]
+        for userdn in submitDict.keys():
             if queueError:
-                # If the queue has failed, then we must not process
-                # any more jobs this cycle.
-                continue
-            while len(jobList) > 0:
-                jobsReady = jobList[:self.config.JobSubmitter.jobsPerWorker]
-                jobList   = jobList[self.config.JobSubmitter.jobsPerWorker:]
-                idList    = [x['id'] for x in jobsReady]
-                jdlList = self.makeSubmit(jobList = jobsReady)
-                if not jdlList or jdlList == []:
-                    # Then we got nothing
-                    logging.error("No JDL file made!")
-                    return {'NoResult': [0]}
-                jdlFile = "%s/submit_%i_%i.jdl" % (self.submitDir, os.getpid(), idList[0])
-                handle = open(jdlFile, 'w')
-                handle.writelines(jdlList)
-                handle.close()
-                jdlFiles.append(jdlFile)
-
-                # Now submit them
-                logging.info("About to submit %i jobs" %(len(jobsReady)))
-                if self.glexecPath:
-                    command = 'CS=`which condor_submit`; '
-                    if self.glexecWrapScript:
-                        command += 'export GLEXEC_ENV=`%s 2>/dev/null`; ' % self.glexecWrapScript
-                    command += 'export GLEXEC_CLIENT_CERT=%s; ' % self.glexecProxyFile
-                    command += 'export GLEXEC_SOURCE_PROXY=%s; ' % self.glexecProxyFile
-                    command += 'export X509_USER_PROXY=%s; ' % self.glexecProxyFile
-                    command += 'export GLEXEC_TARGET_PROXY=%s; ' % self.jdlProxyFile
-                    if self.glexecUnwrapScript:
-                        command += '%s %s -- $CS %s' % (self.glexecPath, self.glexecUnwrapScript, jdlFile)
-                    else:
-                        command += '%s $CS %s' % (self.glexecPath, jdlFile)
-                else:
-                    command = "condor_submit %s" % jdlFile
-
-                try:
-                    self.input.put({'command': command, 'idList': idList})
-                except AssertionError, ex:
-                    msg =  "Critical error: input pipeline probably closed.\n"
-                    msg += str(ex)
-                    msg += "Error Procedure: Something critical has happened in the worker process\n"
-                    msg += "We will now proceed to pull all useful data from the queue (if it exists)\n"
-                    msg += "Then refresh the worker pool\n"
-                    logging.error(msg)
-                    queueError = True
+                break
+            for sandbox in submitDict[userdn].keys():
+                if queueError:
                     break
-                nSubmits += 1
+                jobList = submitDict[userdn].get(sandbox, [])
+                while len(jobList) > 0 and not queueError:
+                    submitted, jdlTemp, queueError, jobList = self.submitJobs(jobList)
+                    nSubmits += submitted
+                    if jdlTemp:
+                        jdlFiles.append( jdlTemp )
+        
+        # now check the status of the submissions
+        successfulJobs, failedJobs = \
+                self.checkCondorResponse( jobs, nSubmits, timeout )
+        
+        # Remove JDL files unless commanded otherwise
+        if getattr(self.config.JobSubmitter, 'deleteJDLFiles', True):
+            for f in jdlFiles:
+                os.remove(f)
 
+        # When we're finished, clean up the queue workers in order
+        # to free up memory (in the midst of the process, the forked
+        # memory space shouldn't be touched, so it should still be
+        # shared, but after this point any action by the Submitter will
+        # result in memory duplication).
+        logging.info("Purging worker pool to clean up memory")
+        self.close()
+
+
+        # We must return a list of jobs successfully submitted,
+        # and a list of jobs failed
+        logging.info("Done submitting jobs for this cycle in CondorPlugin")
+        return successfulJobs, failedJobs
+       
+    def submitJobs(self, jobList):
+        jdlFiles    = []
+        queueError  = False
+        jobsReady   = jobList[:self.config.JobSubmitter.jobsPerWorker]
+        jobList     = jobList[self.config.JobSubmitter.jobsPerWorker:]
+        idList      = [x['id'] for x in jobsReady]
+        
+        # make a target prefix
+        requestID = str(int(time.time()))
+        requestSnip     = requestID[-2:]
+        targetPrefix    = '%s/%s/%s' % (self.remoteSubdir, requestSnip, requestID)
+        inputPrefix     = '%s/input' % (targetPrefix)
+        
+        # combine exactly the same files so they get scpd less times
+        reqDirs, reqFiles, inputPrefix = self.collapseFilesForJobs(jobsReady, inputPrefix)
+
+        # make sure the JDL and submit makes it
+        remoteSub = "%s/%s" % (inputPrefix, \
+                                 os.path.basename(self.scriptFile))
+        
+        jdlList, outDirs = self.makeJDL(jobList = jobsReady, \
+                                   remoteSubmitScript = remoteSub,
+                                   baseOutput = self.remoteSubdir)
+        
+        reqDirs.extend( outDirs )
+        # make a JDL
+        jdlFile = "%s/submit_%i_%i_%i.jdl" % \
+                    (self.submitDir, os.getpid(), idList[0], time.time())
+        handle = open(jdlFile, 'w')
+        handle.writelines(jdlList)
+        handle.close()
+        jdlFiles.append(jdlFile)       
+        remoteJDL = "%s/%s" % (inputPrefix, os.path.basename(jdlFile))
+        reqFiles.append( ( jdlFile, remoteJDL ) )
+        reqFiles.append( ( self.scriptFile, remoteSub ))
+
+        
+        if not jdlList or jdlList == []:
+            # Then we got nothing
+            logging.error("No JDL file made!")
+            nsubmit = 0
+            return nsubmit, None, False, []
+
+        # Now submit them
+        logging.info("About to submit %i jobs" %(len(jobsReady)))
+        mkdirCommand  = self.makeMkdirCommand( reqDirs )
+        copyCommand   = self.makeScpOutwardCommand( reqFiles )
+        submitCommand = self.makeSubmitCommand(remoteJDL)
+        totalCommand = "%s && %s && %s" % (mkdirCommand, copyCommand, submitCommand)
+        
+        if not self.enqueueCommand(totalCommand, idList):
+            queueError = True
+        
+        nsubmit = 1
+        return nsubmit, jdlFile, queueError, jobList
+
+    def checkCondorResponse(self, jobs, nSubmits, timeout):
+        failedJobs     = []
+        successfulJobs = []
+        
         # Now we should have sent all jobs to be submitted
-        # Going to do the rest of it now
+        # Check their status now
         for _ in range(nSubmits):
             try:
                 res = self.result.get(block = True, timeout = timeout)
@@ -431,7 +619,6 @@ class CondorPlugin(BasePlugin):
                 logging.error("This could indicate a critical condor error!")
                 logging.error("However, no information of any use was obtained due to process failure.")
                 logging.error("Either process failed, or process timed out after %s seconds." % timeout)
-                queueError = True
                 continue
             except AssertionError, ex:
                 msg =  "Found Assertion error while retrieving output from worker process.\n"
@@ -440,7 +627,6 @@ class CondorPlugin(BasePlugin):
                 msg += "We will recover what jobs we know were submitted, and resubmit the rest"
                 msg += "Refreshing worker pool at end of loop"
                 logging.error(msg)
-                queueError = True
                 continue
 
             try:
@@ -457,12 +643,15 @@ class CondorPlugin(BasePlugin):
                     pass
                 msg += str(ex)
                 logging.error(msg)
-                queueError = True
                 continue
 
             if not exitCode == 0:
                 logging.error("Condor returned non-zero.  Printing out command stderr")
                 logging.error(error)
+                logging.error("Stdout was")
+                logging.error(output)
+                logging.error("Command line was:")
+                logging.error(res['command'])
                 errorCheck, errorMsg = parseError(error = error)
                 logging.error("Processing failed jobs and proceeding to the next jobs.")
                 logging.error("Do not restart component.")
@@ -487,48 +676,51 @@ class CondorPlugin(BasePlugin):
                         if job.get('id', None) == jobID:
                             successfulJobs.append(job)
                             break
-
-            # If we get a lot of errors in a row it's probably time to
-            # report this to the operators.
-            if self.errorCount > self.errorThreshold:
-                try:
-                    msg = "Exceeded errorThreshold while submitting to condor. Check condor status."
-                    logging.error(msg)
-                    logging.error("Reporting to Alert system and continuing to process jobs")
-                    from WMCore.Alerts import API as alertAPI
-                    preAlert, sender = alertAPI.setUpAlertsMessaging(self,
-                                                                     compName = "BossAirCondorPlugin")
-                    sendAlert = alertAPI.getSendAlert(sender = sender,
-                                                      preAlert = preAlert)
-                    sendAlert(6, msg = msg)
-                    sender.unregister()
-                    self.errorCount = 0
-                except:
-                    # There's nothing we can really do here
-                    pass
-
-        # Remove JDL files unless commanded otherwise
-        if getattr(self.config.JobSubmitter, 'deleteJDLFiles', True):
-            for f in jdlFiles:
-                os.remove(f)
-
-        # When we're finished, clean up the queue workers in order
-        # to free up memory (in the midst of the process, the forked
-        # memory space shouldn't be touched, so it should still be
-        # shared, but after this point any action by the Submitter will
-        # result in memory duplication).
-        logging.info("Purging worker pool to clean up memory")
-        self.close()
-
-
-        # We must return a list of jobs successfully submitted,
-        # and a list of jobs failed
-        logging.info("Done submitting jobs for this cycle in CondorPlugin")
+                        
+            self.errorCount = self.checkErrorCount( self.errorCount )
+            
         return successfulJobs, failedJobs
 
+    def checkErrorCount(self, errorCount):
+        # If we get a lot of errors in a row it's probably time to
+        # report this to the operators.
+        if self.errorCount > self.errorThreshold:
+            try:
+                msg = "Exceeded errorThreshold while submitting to condor. Check condor status."
+                logging.error(msg)
+                logging.error("Reporting to Alert system and continuing to process jobs")
+                from WMCore.Alerts import API as alertAPI
+                preAlert, sender = alertAPI.setUpAlertsMessaging(self,
+                                                                 compName = "BossAirRemoteCondorPlugin")
+                sendAlert = alertAPI.getSendAlert(sender = sender,
+                                                  preAlert = preAlert)
+                sendAlert(6, msg = msg)
+                sender.unregister()
+                errorCount = 0
+            except:
+                # There's nothing we can really do here
+                pass
+        return errorCount
 
-
-
+    def retrieveRemoteFiles(self, jobList):
+        skipCount = 0
+        for job in jobList:
+            if not job.get('cache_dir', None):
+                logging.error("Warning, job (id: %s) has no cache_dir!" % job['jobid'])
+                skipCount += 1
+                continue
+            filePair = self.getTransferPair( job, self.remoteSubdir )
+            scpCommand = self.makeScpInwardCommand([filePair])
+            self.enqueueCommand(scpCommand, [job['jobid']])
+             
+        timeout = getattr(self.config.JobSubmitter, 'getTimeout', 400)
+        # TODO: refactor checkCondorResponse to handle failing to scp files
+        self.checkCondorResponse([], len(jobList) - skipCount, timeout)
+    
+    def getTransferPair(self, job, baseOutput):
+        return ( '"%s/*"' % self.getRemoteOutputDir(job, baseOutput),
+                 job['cache_dir'] )
+        
     def track(self, jobs, info = None):
         """
         _track_
@@ -542,8 +734,7 @@ class CondorPlugin(BasePlugin):
 
 
         # Create an object to store final info
-        trackList = []
-
+        retrieveList = []
         changeList   = []
         completeList = []
         runningList  = []
@@ -551,7 +742,7 @@ class CondorPlugin(BasePlugin):
 
         # Get the job
         jobInfo = self.getClassAds()
-        if jobInfo == None:
+        if not jobInfo:
             return runningList, changeList, completeList
         if len(jobInfo.keys()) == 0:
             noInfoFlag = True
@@ -562,6 +753,7 @@ class CondorPlugin(BasePlugin):
                 # Two options here, either put in removed, or not
                 # Only cycle through Removed if condor_q is sending
                 # us no information
+                retrieveList.append(job)
                 if noInfoFlag:
                     if not job['status'] == 'Removed':
                         # If the job is not in removed, move it to removed
@@ -584,6 +776,7 @@ class CondorPlugin(BasePlugin):
                 elif jobStatus == 5:
                     # Job is Held; experienced an error
                     statName = 'Held'
+                    retrieveList.append(job)
                 elif jobStatus == 2 or jobStatus == 6:
                     # Job is Running, doing what it was supposed to
                     # NOTE: Status 6 is transferring output
@@ -592,15 +785,18 @@ class CondorPlugin(BasePlugin):
                 elif jobStatus == 3:
                     # Job is in X-state: List as error
                     statName = 'Error'
+                    retrieveList.append(job)
                 elif jobStatus == 4:
                     # Job is completed
                     statName = 'Complete'
+                    retrieveList.append(job)
                 else:
                     # What state are we in?
+                    retrieveList.append(job)
                     logging.info("Job in unknown state %i" % jobStatus)
 
                 # Get the global state
-                job['globalState'] = CondorPlugin.stateMap()[statName]
+                job['globalState'] = RemoteCondorPlugin.stateMap()[statName]
 
                 if statName != job['status']:
                     # Then the status has changed
@@ -610,19 +806,16 @@ class CondorPlugin(BasePlugin):
                 #Check if we have a valid status time
                 if not job['status_time']:
                     if job['status'] == 'Running':
-                        job['status_time'] = int(jobAd.get('runningTime', 0))
+                        job['status_time'] = jobAd.get('runningTime', 0)
                     elif job['status'] == 'Idle':
-                        job['status_time'] = int(jobAd.get('submitTime', 0))
+                        job['status_time'] = jobAd.get('submitTime', 0)
                     else:
-                        job['status_time'] = int(jobAd.get('stateTime', 0))
+                        job['status_time'] = jobAd.get('stateTime', 0)
                     changeList.append(job)
 
                 runningList.append(job)
 
-
-
         return runningList, changeList, completeList
-
 
     def complete(self, jobs):
         """
@@ -630,11 +823,19 @@ class CondorPlugin(BasePlugin):
 
         In this case, look for a returned logfile
         """
-
+        logging.error("completion!!!")
+        
+        # retrieve files
+        timeout = getattr(self.config.JobSubmitter, 'getTimeout', 400)
+        self.checkAndStartPool( timeout )        
+        self.retrieveRemoteFiles( jobs )
+        self.close()
+        
+        
         for job in jobs:
             if job.get('cache_dir', None) == None or job.get('retry_count', None) == None:
                 # Then we can't do anything
-                logging.error("Can't find this job's cache_dir in CondorPlugin.complete")
+                logging.error("Can't find this job's cache_dir in RemoteCondorPlugin.complete")
                 logging.error("cache_dir: %s" % job.get('cache_dir', 'Missing'))
                 logging.error("retry_count: %s" % job.get('retry_count', 'Missing'))
                 continue
@@ -699,11 +900,6 @@ class CondorPlugin(BasePlugin):
 
         return
 
-
-
-
-
-
     def kill(self, jobs, info = None):
         """
         Kill a list of jobs based on the WMBS job names
@@ -712,22 +908,30 @@ class CondorPlugin(BasePlugin):
 
         for job in jobs:
             jobID = job['jobid']
-            # This is a very long and painful command to run
-            command = 'condor_rm -constraint \"WMAgent_JobID =?= %i\"' % (jobID)
+            command = [self.ssh, self.remoteUserHost]
+            command.extend( self.gsisshOptions )
+            command.append(" ".join(['condor_rm', '-constraint',\
+                                     '"WMAgent_JobID =?= %i"' % jobID]))
             proc = subprocess.Popen(command, stderr = subprocess.PIPE,
-                                    stdout = subprocess.PIPE, shell = True)
-            out, err = proc.communicate()
+                                    stdout = subprocess.PIPE, shell = False)
+            stdout, stderr = proc.communicate()
+            if not proc.returncode == 0:
+                # Then things have gotten bad - condor_rm is not responding
+                logging.error("condor_rm returned non-zero value %s" % str(proc.returncode))
+                logging.error("command")
+                logging.error(command)
+                logging.error("stdout")
+                logging.error(stdout)
+                logging.error("stderr")
+                logging.error(stderr)
+                logging.error("Skipping classAd processing this round")
+                return
 
         return
 
-
-
-
-
     # Start with submit functions
 
-
-    def initSubmit(self, jobList=None):
+    def initSubmit(self, jobList=None, remoteScript = None):
         """
         _makeConfig_
 
@@ -746,7 +950,10 @@ class CondorPlugin(BasePlugin):
         jdl.append("when_to_transfer_output = ON_EXIT\n")
         jdl.append("log_xml = True\n" )
         jdl.append("notification = NEVER\n")
-        jdl.append("Executable = %s\n" % self.scriptFile)
+        if not remoteScript:
+            jdl.append("Executable = %s\n" % self.scriptFile)
+        else:
+            jdl.append("Executable = %s\n" % remoteScript)
         jdl.append("Output = condor.$(Cluster).$(Process).out\n")
         jdl.append("Error = condor.$(Cluster).$(Process).err\n")
         jdl.append("Log = condor.$(Cluster).$(Process).log\n")
@@ -810,20 +1017,35 @@ class CondorPlugin(BasePlugin):
 
         return jdl
 
-    def makeSubmit(self, jobList):
+    def getRemoteOutputDir(self, job, baseOutput):
+        target = baseOutput
+        if baseOutput and not baseOutput.endswith('/'):
+            target += '/'
+        
+        if not job['cache_dir']:
+            print "no cache dir?"
+            
+        target += job['cache_dir']
+
+        if target.startswith('/'):
+            target = target[1:]
+        return target
+    
+    def makeJDL(self, jobList, remoteSubmitScript, baseOutput = ""):
         """
-        _makeSubmit_
+        _makeJDL_
 
         For a given job/cache/spec make a JDL fragment to submit the job
 
         """
-
+        requiredDirs = []
+        
         if len(jobList) < 1:
             #I don't know how we got here, but we did
             logging.error("No jobs passed to plugin")
             return None
 
-        jdl = self.initSubmit(jobList)
+        jdl = self.initSubmit(jobList, remoteSubmitScript)
 
 
         # For each script we have to do queue a separate directory, etc.
@@ -832,10 +1054,8 @@ class CondorPlugin(BasePlugin):
                 # Then I don't know how we got here either
                 logging.error("Was passed a nonexistant job.  Ignoring")
                 continue
-            jdl.append("initialdir = %s\n" % job['cache_dir'])
-            jdl.append("transfer_input_files = %s, %s/%s, %s\n" \
-                       % (job['sandbox'], job['packageDir'],
-                          'JobPackage.pkl', self.unpacker))
+            # jdl.append("initialdir = %s\n" % job['cache_dir'])
+            jdl.append("transfer_input_files = %s\n" % ", ".join(job['remoteFiles']))
             argString = "arguments = %s %i\n" \
                         % (os.path.basename(job['sandbox']), job['id'])
             jdl.append(argString)
@@ -843,8 +1063,15 @@ class CondorPlugin(BasePlugin):
             jdl.extend(self.customizePerJob(job))
 
             # Transfer the output files
+            jobOutput = self.getRemoteOutputDir( job, baseOutput )
+            requiredDirs.append( jobOutput )    
             jdl.append("transfer_output_files = Report.%i.pkl\n" % (job["retry_count"]))
-
+            jdl.append("transfer_output_remaps = \"Report.%i.pkl = %s/Report.%i.pkl\"\n" %
+                            (job["retry_count"], jobOutput,job["retry_count"]))
+            jdl.append("Output = %s/condor.$(Cluster).$(Process).out\n" % jobOutput)
+            jdl.append("Error = %s/condor.$(Cluster).$(Process).err\n" % jobOutput)
+            jdl.append("Log = %s/condor.$(Cluster).$(Process).log\n" % jobOutput)
+            
             # Add priority if necessary
             if job.get('priority', None) != None:
                 try:
@@ -863,7 +1090,7 @@ class CondorPlugin(BasePlugin):
 
             jdl.append("Queue 1\n")
 
-        return jdl
+        return jdl, requiredDirs
 
     def customizePerJob(self, job):
         """
@@ -907,30 +1134,24 @@ class CondorPlugin(BasePlugin):
             self.locationDict[jobSite] = siteInfo[0].get('ce_name', None)
         return self.locationDict[jobSite]
 
-
-
-
-
     def getClassAds(self):
         """
         _getClassAds_
 
         Grab classAds from condor_q using xml parsing
         """
-
-        constraint = "\"WMAgent_JobID =!= UNDEFINED\""
-
-
         jobInfo = {}
+        command = [self.ssh, self.remoteUserHost]
+        command.extend( self.gsisshOptions )
+        command.append(" ".join(['condor_q', '-constraint', '"WMAgent_JobID =!= UNDEFINED"',
+                   '-constraint', '\'WMAgent_AgentName == \"%s\"\'' % (self.agent),
+                   '-format', '"(JobStatus:\%s)  "', 'JobStatus',
+                   '-format', '"(stateTime:\%s)  "', 'EnteredCurrentStatus',
+                   '-format', '"(runningTime:\%s)  "', 'JobStartDate',
+                   '-format', '"(submitTime:\%s)  "', 'QDate',
+                   '-format', '"(WMAgentID:\%d):::"',  'WMAgent_JobID']))
 
-        command = ['condor_q', '-constraint', 'WMAgent_JobID =!= UNDEFINED',
-                   '-constraint', 'WMAgent_AgentName == \"%s\"' % (self.agent),
-                   '-format', '(JobStatus:\%s)  ', 'JobStatus',
-                   '-format', '(stateTime:\%s)  ', 'EnteredCurrentStatus',
-                   '-format', '(runningTime:\%s)  ', 'JobStartDate',
-                   '-format', '(submitTime:\%s)  ', 'QDate',
-                   '-format', '(WMAgentID:\%d):::',  'WMAgent_JobID']
-
+        print " ".join( command )
         pipe = subprocess.Popen(command, stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell = False)
         stdout, stderr = pipe.communicate()
         classAdsRaw = stdout.split(':::')
@@ -938,6 +1159,12 @@ class CondorPlugin(BasePlugin):
         if not pipe.returncode == 0:
             # Then things have gotten bad - condor_q is not responding
             logging.error("condor_q returned non-zero value %s" % str(pipe.returncode))
+            logging.error("command")
+            logging.error(command)
+            logging.error("stdout")
+            logging.error(stdout)
+            logging.error("stderr")
+            logging.error(stderr)
             logging.error("Skipping classAd processing this round")
             return None
 
@@ -974,3 +1201,4 @@ class CondorPlugin(BasePlugin):
 
 
         return jobInfo
+

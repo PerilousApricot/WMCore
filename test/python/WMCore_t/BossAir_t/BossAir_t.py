@@ -63,15 +63,15 @@ def getNArcJobs():
     return nJobs
 
 
-def getCondorRunningJobs(user):
+def getCondorRunningJobs(user, prefix = []):
     """
     _getCondorRunningJobs_
 
     Return the number of jobs currently running for a user
     """
 
-
-    command = ['condor_q', user]
+    command = prefix[:]
+    command.extend(['condor_q', user])
     pipe = subprocess.Popen(command, stdout = subprocess.PIPE,
                             stderr = subprocess.PIPE, shell = False)
     stdout, error = pipe.communicate()
@@ -104,8 +104,8 @@ class BossAirTest(unittest.TestCase):
         myThread = threading.currentThread()
 
         self.testInit = TestInit(__file__)
-        self.testInit.setLogging()
-        self.testInit.setDatabaseConnection()
+        self.testInit.setLogging(logLevel = logging.DEBUG)
+        self.testInit.setDatabaseConnection(destroyAllDatabase=True)
         #self.tearDown()
         self.testInit.setSchema(customModules = ["WMCore.WMBS", "WMCore.BossAir", "WMCore.ResourceControl", "WMCore.Agent.Database"],
                                 useDefault = False)
@@ -122,23 +122,46 @@ class BossAirTest(unittest.TestCase):
         for site in self.sites:
             resourceControl.insertSite(siteName = site, seName = 'se.%s' % (site),
                                        ceName = site, plugin = "CondorPlugin", pendingSlots = 1000,
-                                       runningSlots = 2000)
+                                       runningSlots = 2000,
+                                       cmsName = site)
             resourceControl.insertThreshold(siteName = site, taskType = 'Processing', \
                                             maxSlots = 1000, pendingSlots = 1000)
         resourceControl.insertSite(siteName = 'Xanadu', seName = 'se.Xanadu',
-                                   ceName = 'Xanadu', plugin = "TestPlugin")
+                                   ceName = 'Xanadu', plugin = "TestPlugin",
+                                   cmsName = 'Xanadu')
         resourceControl.insertThreshold(siteName = 'Xanadu', taskType = 'Processing', \
                                         maxSlots = 10000, pendingSlots = 10000)
 
         resourceControl.insertSite(siteName = 'jade-cms.hip.fi', seName = 'madhatter.csc.fi',
-                                   ceName = 'jade-cms.hip.fi', plugin = "ARCPlugin")
+                                   ceName = 'jade-cms.hip.fi', plugin = "ARCPlugin",
+                                   cmsName = 'jade-cms.hip.fi')
         resourceControl.insertThreshold(siteName = 'jade-cms.hip.fi', taskType = 'Processing', \
                                         maxSlots = 100, pendingSlots = 100)
         # using this for glite submissions
         resourceControl.insertSite(siteName = 'grid-ce-01.ba.infn.it', seName = 'storm-se-01.ba.infn.it',
-                                   ceName = 'grid-ce-01.ba.infn.it', plugin = 'gLitePlugin')
+                                   ceName = 'grid-ce-01.ba.infn.it', plugin = 'gLitePlugin',
+                                   cmsName = 'infn.it')
         resourceControl.insertThreshold(siteName = 'grid-ce-01.ba.infn.it', taskType = 'Processing', \
-                                        maxSlots = 50, pendingSlots = 50)
+                                        maxSlots = 50)
+        
+        # using this for remotecondor submissions
+        resourceControl.insertSite(siteName = 'fake-rcondor', seName = 'se.rcondor',
+                                   ceName = 'grid-ce-rcondor', plugin = 'RemoteCondorPlugin',
+                                   pendingSlots = 1000,
+                                   runningSlots = 2000,
+                                   cmsName = 'fake-rcondor')
+        resourceControl.insertThreshold(siteName = 'fake-rcondor', taskType = 'Processing', \
+                                        maxSlots = 1000)
+        
+        resourceControl.insertSite(siteName = 'fake-rcondor2', seName = 'se.rcondor2',
+                                   ceName = 'grid-ce-rcondor2', plugin = 'RemoteCondorPlugin',
+                                   pendingSlots = 1000,
+                                   runningSlots = 2000,
+                                   cmsName = 'fake-rcondor2')
+        resourceControl.insertThreshold(siteName = 'fake-rcondor2', taskType = 'Processing', \
+                                        maxSlots = 1000)
+        
+        
 
         # Create user
         newuser = self.daoFactory(classname = "Users.New")
@@ -195,7 +218,7 @@ class BossAirTest(unittest.TestCase):
 
 
         config.section_("BossAir")
-        config.BossAir.pluginNames = ['TestPlugin', 'CondorPlugin']
+        config.BossAir.pluginNames = ['TestPlugin', 'RemoteCondorPlugin']
         config.BossAir.pluginDir   = 'WMCore.BossAir.Plugins'
         config.BossAir.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 
@@ -328,8 +351,11 @@ class BossAirTest(unittest.TestCase):
             if site:
                 testFile.setLocation(site)
             else:
+                siteList = []
                 for tmpSite in self.sites:
-                    testFile.setLocation('se.%s' % (tmpSite))
+                    siteList.append('se.%s' % (tmpSite))
+                testFile.setLocation(siteList)
+                
             testFile.create()
             fileset.addFile(testFile)
 
@@ -338,6 +364,7 @@ class BossAirTest(unittest.TestCase):
 
         index = 0
         for f in fileset.files:
+            f.updateLocations()
             index += 1
             testJob = Job(name = '%s-%i' %(name, index))
             testJob.addFile(f)
@@ -415,7 +442,7 @@ class BossAirTest(unittest.TestCase):
 
 
     @attr('integration')
-    def testA_APITest(self):
+    def atestA_APITest(self):
         """
         _APITest_
 
@@ -499,7 +526,7 @@ class BossAirTest(unittest.TestCase):
 
 
     @attr('integration')
-    def testB_PluginTest(self):
+    def atestB_PluginTest(self):
         """
         _PluginTest_
 
@@ -571,7 +598,7 @@ class BossAirTest(unittest.TestCase):
 
         return
 
-    def testG_monitoringDAO(self):
+    def atestG_monitoringDAO(self):
         """
         _monitoringDAO_
 

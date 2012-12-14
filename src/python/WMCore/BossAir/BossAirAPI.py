@@ -434,8 +434,8 @@ class BossAirAPI(WMConnectionBase):
 
         for plugin in pluginDict.keys():
             if not plugin in self.plugins.keys():
-                # Then we have a non-existant plugin
-                msg =  "CRITICAL ERROR: Non-existant plugin!\n"
+                # Then we have a non-existent plugin
+                msg =  "CRITICAL ERROR: Non-existent plugin!\n"
                 msg += "Given a plugin %s that we don't have access to.\n" % (plugin)
                 msg += "Ignoring the jobs for this plugin for now"
                 logging.error(msg)
@@ -549,8 +549,9 @@ class BossAirAPI(WMConnectionBase):
                 msg += str(ex)
                 logging.error(msg)
                 logging.debug("JobsToTrack: %s" % (jobsToTrack[plugin]))
-                raise BossAirException(msg)
-
+                #raise BossAirException(msg)
+                raise
+            
         logging.info("About to change %i jobs\n" % len(jobsToChange))
         logging.debug("JobsToChange: %s" % jobsToChange)
         logging.info("About to complete %i jobs\n" % len(jobsToComplete))
@@ -683,8 +684,8 @@ class BossAirAPI(WMConnectionBase):
 
         for plugin in jobsToKill.keys():
             if not plugin in self.plugins.keys():
-                msg =  "Jobs tracking with non-existant plugin %s\n" % (plugin)
-                msg += "They were submitted but can't be tracked?\n"
+                msg =  "Jobs killing with non-existant plugin %s\n" % (plugin)
+                msg += "They were submitted but can't be killed?\n"
                 msg += "That's too strange to continue\n"
                 logging.error(msg)
                 raise BossAirException(msg)

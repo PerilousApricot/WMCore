@@ -106,7 +106,8 @@ class TestInit:
     def delWorkDir(self):
         if (self.testDir != None):
             try:
-                shutil.rmtree( self.testDir )
+                logging.error("Removing work dir %s" % self.testDir)
+                # shutil.rmtree( self.testDir )
             except:
                 # meh, if it fails, I guess something weird happened
                 pass

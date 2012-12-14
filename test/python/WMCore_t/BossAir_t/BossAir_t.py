@@ -125,18 +125,18 @@ class BossAirTest(unittest.TestCase):
                                        runningSlots = 2000,
                                        cmsName = site)
             resourceControl.insertThreshold(siteName = site, taskType = 'Processing', \
-                                            maxSlots = 1000)
+                                            maxSlots = 1000, pendingSlots = 1000)
         resourceControl.insertSite(siteName = 'Xanadu', seName = 'se.Xanadu',
                                    ceName = 'Xanadu', plugin = "TestPlugin",
                                    cmsName = 'Xanadu')
         resourceControl.insertThreshold(siteName = 'Xanadu', taskType = 'Processing', \
-                                        maxSlots = 10000)
+                                        maxSlots = 10000, pendingSlots = 10000)
 
         resourceControl.insertSite(siteName = 'jade-cms.hip.fi', seName = 'madhatter.csc.fi',
                                    ceName = 'jade-cms.hip.fi', plugin = "ARCPlugin",
                                    cmsName = 'jade-cms.hip.fi')
         resourceControl.insertThreshold(siteName = 'jade-cms.hip.fi', taskType = 'Processing', \
-                                        maxSlots = 100)
+                                        maxSlots = 100, pendingSlots = 100)
         # using this for glite submissions
         resourceControl.insertSite(siteName = 'grid-ce-01.ba.infn.it', seName = 'storm-se-01.ba.infn.it',
                                    ceName = 'grid-ce-01.ba.infn.it', plugin = 'gLitePlugin',

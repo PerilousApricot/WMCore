@@ -13,6 +13,12 @@ suiteDepth            = 0
 cachedModules         = []
 cachedDump            = {}
 
+def compareModules(requestedModules):
+    global cachedModules
+    cachedModules.sort()
+    requestedModules.sort()
+    return cachedModules == requestedModules
+
 def getStatePath( ):
     return os.environ.get('WMCORE_TEST_DB_STATE_PATH', None)
 
@@ -89,25 +95,19 @@ def cacheSQL( modulesInCache ):
     else:
         raise RuntimeError, "Negative suite depth!"
 
-def loadCachedSQL( modulesRequested ):
+def attemptTinyCreate( modulesRequested, params = None ):
     global cachedDump, allowedToDeleteAll, suiteDepth, cachedModules
     if suiteDepth > 0:
-        cachedModules.sort()
-        modulesRequested.sort()
-        if cachedModules == modulesRequested:
-            myThread = threading.currentThread()
-            daofactory = DAOFactory(package = "WMCore.Database",
-                                             logger = myThread.logger,
-                                             dbinterface = myThread.dbi)
-        
-            cacheAction = daofactory(classname = "LoadDump")
+        if compareModules(modulesRequested):
+            raise RuntimeError, "execute creates"
+            init = WMInit()
             try:
-                return cacheAction.execute( cachedDump )
+                init.setSchema( modulesRequested, params = params, tinyCreate = True )
+                return True
             except:
-                print "Unable to load cached SQL"
                 return False
                 
-        else:
+        else: # not the same modules requested
             return False
     elif suiteDepth == 0:
         return False

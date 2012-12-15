@@ -185,10 +185,6 @@ class TestInit:
                                          logger = myThread.logger,
                                          dbinterface = myThread.dbi)
     
-        cacheAction = daofactory(classname = "DumpAll")
-        print "setting database connection"
-        print cacheAction.execute()
-        
         self.destroyAllDatabase = destroyAllDatabase
 
         return
@@ -212,24 +208,7 @@ class TestInit:
         daofactory = DAOFactory(package = "WMCore.Database",
                                          logger = myThread.logger,
                                          dbinterface = myThread.dbi)
-    
-        cacheAction = daofactory(classname = "GetCurrentDatabase")
-        print "setting schema 1"
-        print cacheAction.execute()
         
-        global trashDatabases
-        if disableCaching and \
-            trashDatabases or self.destroyAllDatabase:
-            self.clearDatabase()
-            
-        myThread = threading.currentThread()
-        daofactory = DAOFactory(package = "WMCore.Database",
-                                         logger = myThread.logger,
-                                         dbinterface = myThread.dbi)
-    
-        cacheAction = daofactory(classname = "GetCurrentDatabase")
-        cacheAction.execute()
-
         defaultModules = ["WMCore.WMBS"]
         if not useDefault:
             defaultModules = []
@@ -237,69 +216,53 @@ class TestInit:
         modules = {}
         for module in (defaultModules + customModules):
             modules[module] = 'done'
-        
+         
         if not modules:
             # nothing to load
             self.cachingSet = False
             self.clearDatabase( ignoreCaching = True )
             return
         
-        dbAction = daofactory(classname = "GetCurrentDatabase")
-        print "clearing the database1"
-        currentDB = dbAction.execute()
-        print currentDB
-        if not currentDB:
-            raise RuntimeError, "currentdb is blank"
-        
-        
-        if disableCaching:
-            # Have to check whether or not database is empty 
-            # If the database is not empty when we go to set the schema, abort! 
-            result = self.init.checkDatabaseContents() 
-            if len(result) > 0: 
-                msg =  "Database not empty, cannot set schema !\n" 
-                msg += str(result) 
-                logging.error(msg) 
-                raise TestInitException(msg) 
-        else:
-            cacheSuccess = WMQuality.DatabaseCache.loadCachedSQL( modules.keys() )
-            if cacheSuccess:
-                self.cachingSet = True
-                print "setting schema 2"
-                currentDump = cacheAction.execute()
-                if not currentDump:
-                    raise RuntimeError, "Tried to load the dump, is empty"
-                print currentDump
+  
+        sameModulesWereLoadad = WMQuality.DatabaseCache.compareModules( \
+                                        modules.keys())
+ 
+        global trashDatabases
+        if (trashDatabases or self.destroyAllDatabase) and \
+           (disableCaching or (not sameModulesWereLoaded)):
+            self.clearDatabase()
+            
+        myThread = threading.currentThread()
+        daofactory = DAOFactory(package = "WMCore.Database",
+                                         logger = myThread.logger,
+                                         dbinterface = myThread.dbi)
+
+        # try to load cached DB if possible
+        if not disableCaching and sameModulesWereLoaded:
+            if WMQuality.DatabaseCache.attemptTinyCreate(modules.keys(), \
+                                                         params):
+                logging.debug("Loaded cached database schema")
+                WMQuality.DatabaseCache.SetLoadedModules(modules.keys())
                 return
             else:
-                self.cachingSet = False
-                self.clearDatabase()
+                logging.debug("Didn't load cached database schema")
         
-        dbAction = daofactory(classname = "GetCurrentDatabase")
-        print "clearing the database2"
-        currentDB = dbAction.execute()
-        print currentDB
-        if not currentDB:
-            raise RuntimeError, "currentdb is blank"
+        # Have to check whether or not database is empty 
+        # If the database is not empty when we go to set the schema, abort! 
+        result = self.init.checkDatabaseContents() 
+        if len(result) > 0: 
+            msg =  "Database not empty, cannot set schema !\n" 
+            msg += str(result) 
+            logging.error(msg) 
+            raise TestInitException(msg) 
         
-        # If we made it here, we need to actually load the schema
+        # If we made it here, we need to actually load the schema from scratch
         try:
             self.init.setSchema(modules.keys(), params = params)
         except Exception, ex:
             print traceback.format_exc()
             raise ex
  
-        self.cachingSet = WMQuality.DatabaseCache.cacheSQL( modules.keys() )
-        
-        
-        # track what the schema is so we can see if it was modified previously
-        if disableCaching:
-            self.cachingSet = False
-            
-        print "setting schema 3"
-        currentDump = cacheAction.execute()
-        if not currentDump:
-            raise RuntimeError, "Tried to load the dump, is empty"
         return
 
     def getDBInterface(self):
@@ -341,10 +304,8 @@ class TestInit:
                     "You must set the DATABASE environment variable to run tests"
             config.CoreDatabase.connectUrl = os.getenv("DATABASE")
             config.CoreDatabase.dialect = self.getBackendFromDbURL( os.getenv("DATABASE") )
-            config.CoreDatabase.socket = os.getenv("DBSOCK")
-            if os.getenv("DBHOST"):
-                print "****WARNING: the DBHOST environment variable will be deprecated soon***"
-                print "****WARNING: UPDATE YOUR ENVIRONMENT OR TESTS WILL FAIL****"
+            if (os.getenv('DBSOCK') != None):
+                config.CoreDatabase.socket = os.getenv("DBSOCK")
             # after this you can augment it with whatever you need.
         return config
 
@@ -360,41 +321,18 @@ class TestInit:
                                          logger = myThread.logger,
                                          dbinterface = myThread.dbi)
     
-        cacheAction = daofactory(classname = "DumpAll")
-        print "-in clea dump"
-        currentDump = cacheAction.execute()
-        if not currentDump:
-            print "Empty database before clearDatabase"
-            
-        dbAction = daofactory(classname = "GetCurrentDatabase")
-        print "-in currdb"
-        currentDB = dbAction.execute()
-        print currentDB
-        if not currentDB:
-            raise RuntimeError, "currentdb is blank"
-        
         # Tell the DB cache that tearing down the database is enabled
         # and has been deferred
         
-        if ignoreCaching or not self.cachingSet:
-            raise
+        if ignoreCaching:
             self.init.clearDatabase()
-            WMQuality.DatabaseCache.disableDatabaseTeardown()
         else:
-            WMQuality.DatabaseCache.enableDatabaseTeardown()
-        
-        dbAction = daofactory(classname = "GetCurrentDatabase")
-        print "-in currdb2"
-        currentDB = dbAction.execute()
-        print currentDB
-        if not currentDB:
-            raise RuntimeError, "currentdb is blank"           
+            WMQuality.DatabaseCache.TidyDatabase()
 
 
     def attemptToCloseDBConnections(self):
         return
         myThread = threading.currentThread()
-        print "Closing DB"
         
         try:
             if not myThread.transaction \

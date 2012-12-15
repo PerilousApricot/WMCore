@@ -141,13 +141,17 @@ class WMInit:
         myThread.transaction.commit()                
         return
 
-    def setSchema(self, modules = [], params = None):
+    def setSchema(self, modules = [], params = None, tinyCreate = False):
         """
         Creates the schema in the database based on the modules
         input.
 
         This method needs to have been preceded by the 
         setDatabaseConnection.
+
+        TinyCreate tells the Create DAOs to attempt to only insert rows
+        but assums the schema itself is loaded. This is a performance 
+        enhancement for testing
         """
         myThread = threading.currentThread()
 
@@ -168,7 +172,8 @@ class WMInit:
 
             create = factory.loadObject("Create", args = parameters, listFlag = flag)
             createworked = create.execute(conn = myThread.transaction.conn,
-                                          transaction = myThread.transaction)
+                                          transaction = myThread.transaction,
+                                          tinyCreate = tinyCreate)
             if createworked:
                 logging.debug("Tables for "+ factoryName + " created")
             else:

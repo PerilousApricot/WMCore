@@ -12,6 +12,7 @@ import time
 import pickle
 import threading
 import hashlib
+import logging
 
 # pylint and coverage aren't standard, but aren't strictly necessary
 # you should get them though
@@ -40,6 +41,7 @@ try:
     import nose.case
     can_nose = True
 except:
+    logging.exception("Nose wasn't found!")
     pass
 
 def generate_filelist(basepath=None, recurse=True, ignore=False):

@@ -19,7 +19,7 @@ class Transitions(dict):
         self.setdefault('submitfailed', ['submitcooloff', 'exhausted', 'killed'])
         self.setdefault('jobfailed', ['jobcooloff', 'exhausted', 'killed'])
         self.setdefault('asofailed', ['asocooloff', 'exhausted', 'killed'])
-        self.setdefault('createcooloff', ['new', 'killed', 'createpaused'])
+        self.setdefault('createcooloff', ['created', 'killed', 'createpaused'])
         self.setdefault('submitcooloff', ['created', 'killed', 'submitpaused'])
         self.setdefault('jobcooloff', ['created', 'jobpaused', 'killed'])
         self.setdefault('asocooloff', ['asopending', 'asopaused', 'killed'])

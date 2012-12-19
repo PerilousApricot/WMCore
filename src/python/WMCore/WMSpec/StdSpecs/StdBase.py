@@ -90,6 +90,8 @@ class StdBase(object):
         self.dqmSequences = None
         self.dqmConfigCacheID = None
         self.procScenario = None
+        self.enableHarvesting = True
+        self.enableNewStageout = False
         self.asyncDest = None
         self.owner_vogroup = "DEFAULT"
         self.owner_vorole = "DEFAULT"
@@ -147,6 +149,11 @@ class StdBase(object):
         self.asyncDest = arguments.get("asyncDest", None)
         self.enableHarvesting = arguments.get("EnableHarvesting", True)
         self.enableNewStageout = arguments.get("EnableNewStageout", False)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
 
         if arguments.get("IncludeParents", False) == "True":
             self.includeParents = True

@@ -433,6 +433,7 @@ class AccountantWorker(WMConnectionBase):
         fileList = fwkJobReport.getAllFiles()
         for fwjrFile in fileList:
             if getattr(fwjrFile, "async_dest", None) and \
+               fwjrFile['async_dest'] and \
                 string.lower(getattr(fwjrFile, "asyncStatus", "")) != "success":
                 # means we have an async target and it hasn't been moved yet
                 count += 1

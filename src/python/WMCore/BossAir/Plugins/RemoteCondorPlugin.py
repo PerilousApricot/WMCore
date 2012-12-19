@@ -206,7 +206,7 @@ class RemoteCondorPlugin(BasePlugin):
         self.glexecPath  = getattr(config.BossAir, 'glexecPath', None)
         self.glexecWrapScript = getattr(config.BossAir, 'glexecWrapScript', None)
         self.glexecUnwrapScript = getattr(config.BossAir, 'glexecUnwrapScript', None)
-        self.gsisshOptions = ["-o", "ForwardX11=no"]
+        self.gsisshOptions = ["-o", "ForwardX11=no","-o", "ProxyCommand=none"]
         self.remoteUserHost = "se2.accre.vanderbilt.edu"
         self.jdlProxyFile    = None # Proxy name to put in JDL (owned by submit user)
         self.glexecProxyFile = None # Copy of same file owned by submit user

@@ -80,6 +80,18 @@ class WMStepHelper(TreeHelper):
         if node == None:
             return None
         return WMStepHelper(node)
+    
+    def setPreserveLFN(self, value):
+        """
+        _setPreserveLFN_
+        
+        Adds a flag to tell ASO to not munge the LFN of the files
+           (useful to ASO an unmerged file from /store/temp to /store/temp)
+        """
+        self.data.preserveLFN = value
+    
+    def getPreserveLFN(self):
+        return getattr(self.data, 'preserveLFN', False)
 
     def setUserDN(self, userDN):
         """

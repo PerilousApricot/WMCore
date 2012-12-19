@@ -28,6 +28,30 @@ lfnParts = {
     'physics_group' : '([a-zA-Z\-_]+)',
 }
 
+def DBSUser(candidate):
+    """
+    create_by and last_modified_by in DBS are in several formats. The major ones are: 
+    1. DN that is mostly used in DBS2: example /DC=org/DC=doegrids/OU=People/CN=Lothar A.T. Bauerdick 301799; 
+    2. CERN HN account name that used in DBS3/CMSWEB if the HN is assocated with DN: example giffels ;
+    3. username with host name: example cmsprod@vocms39.cern.ch;
+    """
+    if candidate =='' or not candidate :
+        return candidate
+    r1 = r'^/[a-zA-Z][a-zA-Z0-9/\=\s()]*\=[a-zA-Z0-9/\.\-_/#:\s]*$'
+    r2 = r'^[a-zA-Z0-9/][a-zA-Z0-9/\.\-_]*$'
+    r3 = r'^[a-zA-Z0-9/][a-zA-Z0-9/\.\-_]*@[a-zA-Z0-9/][a-zA-Z0-9/\.\-_]*$'
+
+    try:
+        return check(r1, candidate)
+    except AssertionError:
+        pass
+
+    try:
+        return check(r2, candidate)
+    except AssertionError:
+        return check(r3, candidate)
+
+
 def searchblock(candidate):
     """
     A block name with a * wildcard one or more times in it.
@@ -40,7 +64,7 @@ def searchdataset(candidate):
     """
     A dataset name with a * wildcard one or more times in it. Only the first '/' is mandatory to use.
     """
-    regexp = r"^/(\*|[a-zA-Z\*][a-zA-Z0-9_\*]{0,100})(/(\*|[a-zA-Z0-9_\.\-\*]{1,100})){0,1}(/(\*|[A-Z\-\*]{1,50})){0,1}$"
+    regexp = r"^/(\*|[a-zA-Z\*][a-zA-Z0-9_\*\-]{0,100})(/(\*|[a-zA-Z0-9_\.\-\*]{1,100})){0,1}(/(\*|[A-Z\-\*]{1,50})){0,1}$"
     return check(regexp, candidate)
 
 def searchstr(candidate):
@@ -161,7 +185,7 @@ def lfn(candidate):
     """
     regexp1 = '/([a-z]+)/([a-z0-9]+)/([a-zA-Z0-9\-_]+)/([a-zA-Z0-9\-_]+)/([A-Z\-_]+)/([a-zA-Z0-9\-_]+)((/[0-9]+){3}){0,1}/([0-9]+)/([a-zA-Z0-9\-_]+).root'
     regexp2 = '/([a-z]+)/([a-z0-9]+)/([a-z0-9]+)/([a-zA-Z0-9\-_]+)/([a-zA-Z0-9\-_]+)/([A-Z\-_]+)/([a-zA-Z0-9\-_]+)((/[0-9]+){3}){0,1}/([0-9]+)/([a-zA-Z0-9\-_]+).root'
-    regexp3 = '/store/(temp/)*(user|group)/%(hnName)s/%(primDS)s/%(secondary)s/%(version)s/%(counter)s/%(root)s' % lfnParts
+    regexp3 = '/store/(temp/)*(user|group)/(%(hnName)s/)*%(hnName)s/%(primDS)s/%(secondary)s/%(version)s/%(counter)s/%(root)s' % lfnParts
 
     oldStyleTier0LFN = '/store/data/%(era)s/%(primDS)s/%(tier)s/%(version)s/%(counter)s/%(counter)s/%(counter)s/%(root)s' % lfnParts
     tier0LFN = '/store/(backfill/[0-9]/){0,1}(t0temp/){0,1}(data|express|hidata)/%(era)s/%(primDS)s/%(tier)s/%(version)s/%(counter)s/%(counter)s/%(counter)s/%(counter)s/%(root)s' % lfnParts
@@ -200,7 +224,7 @@ def lfnBase(candidate):
     """
     regexp1 = '/([a-z]+)/([a-z0-9]+)/([a-zA-Z0-9\-_]+)/([a-zA-Z0-9\-_]+)/([A-Z\-_]+)/([a-zA-Z0-9\-_]+)'
     regexp2 = '/([a-z]+)/([a-z0-9]+)/([a-z0-9]+)/([a-zA-Z0-9\-_]+)/([a-zA-Z0-9\-_]+)/([A-Z\-_]+)/([a-zA-Z0-9\-_]+)((/[0-9]+){3}){0,1}'
-    regexp3 = '/(store)/(temp/)*(user|group)/%(hnName)s/%(primDS)s/%(secondary)s/%(version)s' % lfnParts
+    regexp3 = '/(store)/(temp/)*(user|group)/%(hnName)s/(%(hnName)s/)*%(primDS)s/%(secondary)s/%(version)s' % lfnParts
 
     tier0LFN = '/store/(backfill/[0-9]/){0,1}(t0temp/){0,1}(data|express|hidata)/%(era)s/%(primDS)s/%(tier)s/%(version)s/%(counter)s/%(counter)s/%(counter)s' % lfnParts
 
@@ -223,14 +247,14 @@ def userLfn(candidate):
     """
     Check LFNs in /store/{temp}/user that are not EDM data
     """
-    regexp = '/store/(temp/)*(user|group)/%(hnName)s/%(subdir)s/%(workflow)s/%(subdir)s/%(file)s' % lfnParts
+    regexp = '/store/(temp/)*(user|group)/(%(hnName)s/)*%(hnName)s/%(subdir)s/%(workflow)s/%(subdir)s/%(file)s' % lfnParts
     return check(regexp, candidate)
 
 def userLfnBase(candidate):
     """
     As above but for the base part of the file
     """
-    regexp = '/store/(temp/)*(user|group)/%(hnName)s/%(subdir)s/%(workflow)s/%(subdir)s' % lfnParts
+    regexp = '/store/(temp/)*(user|group)/%(hnName)s/(%(hnName)s/)*%(subdir)s/%(workflow)s/%(subdir)s' % lfnParts
     return check(regexp, candidate)
 
 def cmsswversion(candidate):
@@ -241,6 +265,22 @@ def couchurl(candidate):
 
 def requestName(candidate):
     return check(r'[a-zA-Z0-9\.\-_]{1,150}$', candidate)
+
+def validateUrl(candidate):
+    """
+    Basic input validation for http(s) urls
+    """
+    #regex taken from django https://github.com/django/django/blob/master/django/core/validators.py#L47
+    #Copyright (c) Django Software Foundation and individual contributors
+    protocol = r"^https?://"  # http:// or https://
+    domain = r'?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}\.?'
+    localhost = r'localhost'
+    ipv4 = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
+    ipv6 = r'\[?[a-fA-F0-9]*:[a-fA-F0-9:]+\]?'
+    port = r'(?::\d+)?'  # optional port
+    path = r'(?:/?|[/?]\S+)$'
+    regex_url = r'%s(%s|%s|%s|%s)%s%s' % (protocol, domain, localhost, ipv4, ipv6, port, path)
+    return check(regex_url, candidate)
 
 def check(regexp, candidate):
     assert re.compile(regexp).match(candidate) != None , \
@@ -271,6 +311,23 @@ def parseLFN(candidate):
             final['baseLocation'] = '/%s' % string.join(parts[:3], '/')
             parts = parts[3:]
 
+        """ Now we have everything we need, btu the wrinkle is that there can
+            be sub-group storage (i.e. /store/user/lpctlbsm/meloam/blah
+
+            The sub-group storage is nice because a lot of analysis looks for files
+            in subdrectories and it makes it easy to see how is responsibe
+            for cleaning out the group storage.
+
+            Now, I'm not sure if this is optimal for the hnName stuff, but we'll see
+        """
+        
+        if len( parts ) == 7:
+            """
+            snip out the top-level storage, leaving the hnname of the user that
+            submitted
+            """
+            parts = parts[1:]
+    
         final['hnName']            = parts[0]
         final['primaryDataset']    = parts[1]
         final['secondaryDataset']  = parts[2]
@@ -332,6 +389,10 @@ def parseLFNBase(candidate):
         else:
             final['baseLocation'] = '/%s' % string.join(parts[:3], '/')
             parts = parts[3:]
+
+        """ see previous parseLFN funciton for an explanation"""
+        if len( parts ) == 5:
+            parts = parts[1:]
 
         final['hnName']            = parts[0]
         final['primaryDataset']    = parts[1]

@@ -188,6 +188,7 @@ class StageOut(Executor):
                                 stepReport.addError(self.stepName, 60402,
                                                     "DirectToMergeFailure", str(ex))
 
+                
                 # Save the input PFN in case we need it
                 # Undecided whether to move file.pfn to the output PFN
                 file.InputPFN   = file.pfn
@@ -286,6 +287,8 @@ class StageOut(Executor):
                 file.async_dest = getattr(self.step, "asyncDest", None)
                 file.user_vogroup = getattr(self.step, "owner_vogroup", '')
                 file.user_vorole = getattr(self.step, "owner_vorole", '')
+                # Propagate that we want to preserve the lfn across ASO
+                file.preserve_lfn = getattr( self.step, 'preserveLFN', False)
 
             stepReport.persist(reportLocation)
 

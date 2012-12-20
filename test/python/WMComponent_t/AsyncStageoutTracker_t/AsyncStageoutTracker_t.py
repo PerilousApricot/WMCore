@@ -362,7 +362,7 @@ else:
             resourceControl.insertSite(siteName = 'malpaquet', seName = 'se.malpaquet',
                                        ceName = 'malpaquet', plugin = "CondorPlugin")
             resourceControl.insertThreshold(siteName = 'malpaquet', taskType = 'Processing', \
-                                            maxSlots = 10000)
+                                            maxSlots = 10000, pendingSlots = 10000)
     
             locationAction = self.daoFactory(classname = "Locations.New")
             locationAction.execute(siteName = "malpaquet", seName = "malpaquet",

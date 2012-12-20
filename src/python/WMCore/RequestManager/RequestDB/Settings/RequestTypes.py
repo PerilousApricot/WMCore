@@ -23,4 +23,6 @@ TypesList = [
     "TaskChain",
     "PrivateMC",
     "LHEStepZero",
+    "MeloProcessing",
+    "MeloMC"
     ]

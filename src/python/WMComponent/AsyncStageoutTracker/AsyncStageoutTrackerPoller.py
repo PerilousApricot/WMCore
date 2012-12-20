@@ -158,10 +158,11 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                     
                     #newPfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'].replace('store/temp', 'store', 1)))
                     print "PRESERVE LFN1 %s %s" % (oneFile['value']['lfn'], oneFile['value'].get('preserve_lfn', False))
-                    if oneFile['value'].get("preserve_lfn", False) == False:
-                        lfn = oneFile['value']['lfn'].replace('store/temp', 'store', 1)
-                    else:
-                        lfn = oneFile['value']['lfn']
+                    lfn = oneFile['value']['dest_lfn']
+#                    if oneFile['value'].get("preserve_lfn", False) == False:
+#                        lfn = oneFile['value']['lfn'].replace('store/temp', 'store', 1)
+#                    else:
+#                        lfn = oneFile['value']['lfn']
 
                     oneCache[lfn] = \
                                 { 'state' : oneFile['value']['state'],
@@ -179,12 +180,11 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
             filesFailed = False
             asoComplete = True
             for fwjrFile in allFiles:
-                print "PRESERVE LFN2 %s %s" % (fwjrFile.lfn, getattr(fwjrFile, 'preserve_lfn', False))
                 if getattr(fwjrFile, "preserve_lfn", False) == False:
                     lfn = fwjrFile.lfn.replace('store/temp', 'store', 1)
                 else:
                     lfn = fwjrFile.lfn
-                #lfn = fwjrFile.lfn
+                    
                 # if we wanted ASO, ASO is complete and the LFN is there
                 if getattr(fwjrFile, "async_dest", None) and \
                     not getattr(fwjrFile, "asyncStatus", None):

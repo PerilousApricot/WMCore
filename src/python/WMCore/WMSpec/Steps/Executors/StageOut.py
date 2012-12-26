@@ -151,13 +151,11 @@ class StageOut(Executor):
                 # First check if it's needed
                 if hasattr(self.step.output, 'minMergeSize') \
                        and hasattr(file, 'size') \
-                       and not getattr(file, 'merged', False):
+                       and not getattr(file, 'merged', False)
+                       and not getattr(self.step.output, \
+                                        'doNotDirectMerge', \
+                                        False):
 
-                    # We need both of those to continue, and we don't
-                    # direct-to-merge
-                    if getattr(self.step.output, 'doNotDirectMerge', False):
-                        # Then we've been told explicitly not to do direct-to-merge
-                        continue
                     if file.size >= self.step.output.minMergeSize:
                         # Then this goes direct to merge
                         try:
@@ -194,10 +192,21 @@ class StageOut(Executor):
                 file.InputPFN   = file.pfn
                 lfn = getattr(file, 'lfn')
                 fileSource = getattr(file, 'Source', None)
-                if fileSource in ['TFileService', 'UserDefined']:
-                    userLfnRegEx(lfn)
-                else:
-                    lfnRegEx(lfn)
+                logging.info("Checking lfn against lexicon: %s" % lfn)
+                try:
+                    if fileSource in ['TFileService', 'UserDefined']:
+                        userLfnRegEx(lfn)
+                    else:
+                        lfnRegEx(lfn)
+                except AssertionError, ex:
+                    msg = "Lexicon failed for lfn %s" % lfn
+                    logging.error(msg)
+                    stepReport.addError(self.stepName, 60403,
+                                        "StageOutBadLfn", msg)
+                    stepReport.persist("Report.pkl")
+
+
+                logging.info("Lexicon passedd")
                 fileForTransfer = {'LFN': lfn,
                                    'PFN': getattr(file, 'pfn'),
                                    'SEName' : None,
@@ -280,8 +289,9 @@ class StageOut(Executor):
             files = stepReport.getAllFileRefsFromStep(step = step)
             for file in files:
 
-                if not hasattr(file, 'lfn') or not hasattr(file, 'location') or \
-                       not hasattr(file, 'guid'):
+                if not hasattr(file, 'lfn') or \
+                        not hasattr(file, 'guid') or \
+                        not hasattr(file, 'location'):
                     continue
 
                 file.user_dn = getattr(self.step, "userDN", None)

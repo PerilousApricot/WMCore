@@ -28,6 +28,7 @@ from WMCore.WMInit                     import getWMBASE
 from WMCore.BossAir.Plugins.BasePlugin import BasePlugin, BossAirPluginException
 from WMCore.FwkJobReport.Report        import Report
 from WMCore.Algorithms                 import SubprocessAlgos
+from WMCore.Services.SiteDB            import SiteDB
 
 def submitWorker(input, results, timeout = None):
     """
@@ -127,7 +128,8 @@ class RemoteCondorPlugin(BasePlugin):
     """
     _RemoteCondorPlugin_
 
-    Remote Condor plugin for glide-in submissions
+    Remote Condor plugin for glide-in submissions to the 
+    UCSD analysis glidein server
     """
 
     @staticmethod
@@ -194,6 +196,9 @@ class RemoteCondorPlugin(BasePlugin):
         self.input    = None
         self.result   = None
         self.nProcess = getattr(self.config.BossAir, 'nCondorProcesses', 4)
+        
+        # Get a sitedb instance to convert to SE names
+        self.siteDB = SiteDB.SiteDBJSON()
 
         # Set up my proxy and glexec stuff
         self.setupScript = getattr(config.BossAir, 'UISetupScript', None)
@@ -206,8 +211,9 @@ class RemoteCondorPlugin(BasePlugin):
         self.glexecPath  = getattr(config.BossAir, 'glexecPath', None)
         self.glexecWrapScript = getattr(config.BossAir, 'glexecWrapScript', None)
         self.glexecUnwrapScript = getattr(config.BossAir, 'glexecUnwrapScript', None)
-        self.gsisshOptions = ["-o", "ForwardX11=no","-o", "ProxyCommand=none"]
-        self.remoteUserHost = "se2.accre.vanderbilt.edu"
+        self.gsisshOptions = ["-o", "ForwardX11=no","-o", "ProxyCommand=none", "-o", "ControlPath=none"]
+        #self.remoteUserHost = "se2.accre.vanderbilt.edu"
+        self.remoteUserHost  = "submit-2.t2.ucsd.edu"
         self.jdlProxyFile    = None # Proxy name to put in JDL (owned by submit user)
         self.glexecProxyFile = None # Copy of same file owned by submit user
 
@@ -234,14 +240,14 @@ class RemoteCondorPlugin(BasePlugin):
             self.proxy = self.setupMyProxy()
 
         # Build a request string
-        self.reqStr = "(Memory >= 1 && OpSys == \"LINUX\" ) && (Arch == \"INTEL\" || Arch == \"X86_64\") && stringListMember(GLIDEIN_CMSSite, DESIRED_Sites)"
+        self.reqStr = "(Memory >= 1 && OpSys == \"LINUX\" ) && (Arch == \"INTEL\" || Arch == \"X86_64\")"
         if hasattr(config.BossAir, 'condorRequirementsString'):
             self.reqStr = config.BossAir.condorRequirementsString
 
         # for testing
         #  this should be gsissh or gsiscp
-        self.ssh = 'ssh'
-        self.scp = 'scp'
+        self.ssh = 'gsissh'
+        self.scp = 'gsiscp'
         self.remoteSubdir = "bossair"
 
 
@@ -386,6 +392,7 @@ class RemoteCondorPlugin(BasePlugin):
         wrapscp = "%s %s %s" % (wrapper, self.scp, " ".join(self.gsisshOptions))
         commands = []
         for onefile in targetFiles:
+            logging.error("Checking this exists ->%s<-" % onefile[0])
             assert os.path.exists( onefile[0] )
             commands.append('%s %s %s:%s' % \
                             (wrapscp, onefile[0], self.remoteUserHost, onefile[1]))
@@ -571,6 +578,18 @@ class RemoteCondorPlugin(BasePlugin):
                                    remoteSubmitScript = remoteSub,
                                    baseOutput = self.remoteSubdir)
         
+        # if we got a proxy, remember to move it
+        for index in range(len(jdlList)):
+            line = jdlList[index]
+            if line.startswith('x509userproxy'):
+                proxyFile = line.split(' = ')[1].rstrip()
+                logging.info("splitting %s " % line)
+                logging.info("got this %s" % proxyFile)
+                remoteProxy = "%s/%s" % (inputPrefix, 'proxy.cert')
+                reqFiles.append( (proxyFile, remoteProxy) )
+                jdlList[index] = 'x509userproxy = %s\n' % remoteProxy
+                logging.error("did this to proxy: %s" % jdlList[index])       
+
         reqDirs.extend( outDirs )
         # make a JDL
         jdlFile = "%s/submit_%i_%i_%i.jdl" % \
@@ -582,8 +601,8 @@ class RemoteCondorPlugin(BasePlugin):
         remoteJDL = "%s/%s" % (inputPrefix, os.path.basename(jdlFile))
         reqFiles.append( ( jdlFile, remoteJDL ) )
         reqFiles.append( ( self.scriptFile, remoteSub ))
+        print "\n".join(jdlList)
 
-        
         if not jdlList or jdlList == []:
             # Then we got nothing
             logging.error("No JDL file made!")
@@ -957,9 +976,11 @@ class RemoteCondorPlugin(BasePlugin):
         jdl.append("Output = condor.$(Cluster).$(Process).out\n")
         jdl.append("Error = condor.$(Cluster).$(Process).err\n")
         jdl.append("Log = condor.$(Cluster).$(Process).log\n")
-
+        jdl.append("PeriodicRemove = ( ( JobStatus == 2 ) && ( ( ( CurrentTime - JobCurrentStartDate ) > ( MaxWallTimeMins * 60 ) ) =?= true ) ) || ( JobStatus == 5 && ( CurrentTime - EnteredCurrentStatus ) > 691200 ) || ( JobStatus == 1 && ( CurrentTime - EnteredCurrentStatus ) > 691200 )\n")
         jdl.append("+WMAgent_AgentName = \"%s\"\n" %(self.agent))
-
+        # TODO: some stuff can overflow just fine
+        jdl.append("+CMS_ALLOW_OVERFLOW = False\n")
+        jdl.append("+JOB_Is_ITB = False\n")
         jdl.extend(self.customizeCommon(jobList))
 
         if self.proxy:
@@ -1073,9 +1094,11 @@ class RemoteCondorPlugin(BasePlugin):
             jdl.append("Log = %s/condor.$(Cluster).$(Process).log\n" % jobOutput)
             
             # Add priority if necessary
+            if job.get('priority', None) == None:
+                job['priority'] = 0
             if job.get('priority', None) != None:
                 try:
-                    prio = int(job['priority'])
+                    prio = int(job['priority']) + 6
                     jdl.append("priority = %i\n" % prio)
                 except ValueError:
                     logging.error("Priority for job %i not castable to an int\n" % job['id'])
@@ -1109,8 +1132,13 @@ class RemoteCondorPlugin(BasePlugin):
             jdl.append('+GLIDEIN_CMSSite = \"%s\"\n' % (jobCE))
         if self.submitWMSMode and len(job.get('possibleSites', [])) > 0:
             strg = list(job.get('possibleSites')).__str__().lstrip('[').rstrip(']')
+            seList = []
             strg = filter(lambda c: c not in "\'", strg)
+            siteSplit = strg.split(', ')
+            for site in siteSplit:
+                seList.extend(self.siteDB.cmsNametoSE(site))
             jdl.append('+DESIRED_Sites = \"%s\"\n' % strg)
+            jdl.append('+DESIRED_SEs = \"%s\"\n' % ','.join(seList))
         else:
             jdl.append('+DESIRED_Sites = \"%s\"\n' %(jobCE))
 

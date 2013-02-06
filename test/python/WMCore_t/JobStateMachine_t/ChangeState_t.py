@@ -226,7 +226,6 @@ class TestChangeState(unittest.TestCase):
             couchJobDoc = changeStateDB.document(row["value"]["id"])
             self.assertEqual(couchJobDoc["_rev"], row["value"]["rev"],
                              "Error: Rev is wrong.")
-            
         change.propagate([testJobA, testJobB], "complete", "executing")
         change.propagate([testJobA, testJobB], "pendingaso", "complete")
             

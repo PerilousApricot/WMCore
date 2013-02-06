@@ -159,14 +159,10 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                     #newPfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'].replace('store/temp', 'store', 1)))
                     print "PRESERVE LFN1 %s %s" % (oneFile['value']['lfn'], oneFile['value'].get('preserve_lfn', False))
                     lfn = oneFile['value']['dest_lfn']
-#                    if oneFile['value'].get("preserve_lfn", False) == False:
-#                        lfn = oneFile['value']['lfn'].replace('store/temp', 'store', 1)
-#                    else:
-#                        lfn = oneFile['value']['lfn']
-
                     oneCache[lfn] = \
                                 { 'state' : oneFile['value']['state'],
                                   'lfn'   : lfn,
+                                  'dest_lfn'   : oneFile['value']['dest_lfn'],
                                   'location' : self.phedexApi.getNodeSE( oneFile['value']['location'] )}
                       
                 filesCache[workflow] = oneCache
@@ -190,12 +186,17 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                     not getattr(fwjrFile, "asyncStatus", None):
                     
                     if not lfn in asoFiles:
+                        if lfn.replace('store', 'store/temp', 1) in asoFiles:
+                            raise RuntimeError, "Wanted a preserved LFN, got a pruned one"
+                        if lfn.replace('store/temp', 'store', 1) in asoFiles:
+                            raise RuntimeError, "Wanted a pruned LFN, got a preserved one"
+                        
                         asoComplete = False
                         continue
                     
                     if asoFiles[lfn]['state'] == 'done':
                         fwjrFile.asyncStatus = 'Success'
-                        fwjrFile.lfn = lfn
+                        fwjrFile.lfn = asoFiles[lfn]['dest_lfn']
                         fwjrFile.location    = asoFiles[lfn]['location']
                         jobReport.save( jobReportPath )
                     elif asoFiles[lfn]['state'] == 'failed':

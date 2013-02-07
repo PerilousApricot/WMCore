@@ -592,6 +592,7 @@ else:
                        "state": "success",
                        "output": [
                            {
+                               "asyncDest": "T2_US_Vanderbilt",
                                "lfn": "/store/temp/user/meloam/T2stop_600_50_0_5test/MeloAcquisitionEra/IntegrationTest_120810/00000/B4749FB5-38E3-E111-ADC3-782BCB4FBD6F.root",
                                "location": "T2_US_Vanderbilt",
                                "checksums": {

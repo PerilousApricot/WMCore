@@ -21,7 +21,7 @@ from WMCore.WorkerThreads.BaseWorkerThread import BaseWorkerThread
 
 from WMCore.WMBS.Job          import Job
 from WMCore.DAOFactory        import DAOFactory
-from WMCore.Database.CMSCouch import CouchServer
+from WMCore.Database.CMSCouch import CouchServer, CouchError
 
 from WMCore.JobStateMachine.ChangeState import ChangeState
 from WMCore.ACDC.DataCollectionService  import DataCollectionService
@@ -113,20 +113,31 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
         for k in self.jobWorkflowCache:
             if self.jobWorkflowCache[k][1] < cutoffTime:
                 del self.jobWorkflowCache[k]
-            
     def algorithm(self, parameters = None):
+        """
+        Wrap exceptions here .. we want to at least retry later
+        """
+        try:
+            return self.algorithm_real(parameters)
+        except CouchError, e:
+            logging.exception("We got the exception %s. Ignorning" % e)
+        except Exception, e:
+            logging.exception("We got an unrecognized exception %s. Bad!" % e)
+            
+    def algorithm_real(self, parameters = None):
         """
     	Performs the handleErrors method, looking for each type of failure
     	And deal with it as desired.
         """
+        logging.debug("Beginning ASOTracker loop")
         filesCache = {}
         currentTime = time.time()
         pendingASOJobs = self.getJobsAction.execute(state = "asopending")
-        
+        logging.debug("Have %s jobs to examine" % len(pendingASOJobs))
         for job_id in pendingASOJobs:
             workflow = self.getWorkflowNameFromJobId(job_id)
-            self.logger.info("Processing %s from %s" % \
-                                (job_id, workflow) )
+            #logging.debug("Processing %s from %s" % \
+            #                    (job_id, workflow) )
 
             job = Job( id = job_id )
             job.load()
@@ -135,34 +146,30 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
             try:
                 jobReportPath = jobReportPath.replace("file://","")
                 jobReport.load( jobReportPath )
-            except Exception, _:
+            except Exception, ex:
                 # if we got here, we must've used to have had a FWJR, knock it back
                 # to the JobAccountant, they can deal with it
-                logging.info( "ASOTracker: %s has no FWJR, but it should if we got here" % job['id'])
+                logging.debug( "ASOTracker: %s has no FWJR, but it should if we got here" % job['id'])
+                logging.debug( "ASOTracker: Tried to open %s" % jobReportPath )
+                logging.debug( "ASOTracker: Got exception %s" % ex )
                 # FIXME Should find out how to store errors so the outside will see
                 self.stateChanger.propagate(job, "complete", "asopending")
                 continue
             
             # retrieve all the files for this workflow, if it exists
             if not workflow in filesCache:
-                query = { 'startkey' : [workflow, int(self.lastMonitoringTimestamp - 120)],
-                          'endkey' : [workflow, int(currentTime) + 1],
+                logging.debug("Pulling document from couch: %s" % workflow)
+                query = { 'startkey' : [workflow],
+                          'endkey' : [workflow, {}],
                           'reduce' : False }
                 monFiles = self.asoMonDB.loadView('UserMonitoring',\
                                                   'FilesByWorkflow',\
                                                   query)
-                self.logger.info("Got this for files %s using %s" % (monFiles, query))
                 oneCache = {}
+                logging.debug("Have %s files in the view" % \
+                                    len(monFiles['rows']))
                 for oneFile in monFiles['rows']:
-                    # Store the timestamp for the transferred file
-                    
-                    #newPfn = self.apply_tfc_to_lfn('%s:%s' % (destination, item['value'].replace('store/temp', 'store', 1)))
-                    print "PRESERVE LFN1 %s %s" % (oneFile['value']['lfn'], oneFile['value'].get('preserve_lfn', False))
                     lfn = oneFile['value']['dest_lfn']
-#                    if oneFile['value'].get("preserve_lfn", False) == False:
-#                        lfn = oneFile['value']['lfn'].replace('store/temp', 'store', 1)
-#                    else:
-#                        lfn = oneFile['value']['lfn']
 
                     oneCache[lfn] = \
                                 { 'state' : oneFile['value']['state'],
@@ -180,7 +187,12 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
             filesFailed = False
             asoComplete = True
             for fwjrFile in allFiles:
-                if getattr(fwjrFile, "preserve_lfn", False) == False:
+
+                #logging.debug("looking at file - outer")
+                #logging.debug(fwjrFile)
+
+                if (getattr(fwjrFile, "preserveLFN", False) == False) and\
+                   (getattr(fwjrFile, "preserve_lfn", False) == False):
                     lfn = fwjrFile.lfn.replace('store/temp', 'store', 1)
                 else:
                     lfn = fwjrFile.lfn
@@ -188,15 +200,18 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                 # if we wanted ASO, ASO is complete and the LFN is there
                 if getattr(fwjrFile, "async_dest", None) and \
                     not getattr(fwjrFile, "asyncStatus", None):
-                    
+                    #logging.debug("looking at file %s" % lfn)
+                    #logging.debug("got asoFiles %s" % asoFiles)
                     if not lfn in asoFiles:
                         asoComplete = False
+                        #logging.debug("not found in the list of asoFiles")
                         continue
-                    
+                    #logging.debug("found in list of asofiles")
                     if asoFiles[lfn]['state'] == 'done':
                         fwjrFile.asyncStatus = 'Success'
                         fwjrFile.lfn = lfn
                         fwjrFile.location    = asoFiles[lfn]['location']
+                        logging.debug("Saving a file success to %s" % jobReportPath)
                         jobReport.save( jobReportPath )
                     elif asoFiles[lfn]['state'] == 'failed':
                         # TODO: need to propagate diagnostic info here
@@ -204,8 +219,10 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
                         jobReport.save( jobReportPath )
                         filesFailed = True
                     else:
+                        logging.debug('the file had the state %s' % \
+                                            asoFiles[lfn]['state'] )
                         asoComplete = False
-                    
+                   # 
             
             # Obviously need to change this to query the info from ASO
             #   if a job failed, send it to asofailed instead
@@ -232,13 +249,13 @@ class AsyncStageoutTrackerPoller(BaseWorkerThread):
         #TODO: improve fix for wrong tfc on sites
         try:
             if pfn.split(':')[0] != 'srm':
-                self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
+                logging.error('Broken tfc for file %s at site %s' % (lfn, site))
                 return None
         except IndexError:
-            self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
+            logging.error('Broken tfc for file %s at site %s' % (lfn, site))
             return None
         except AttributeError:
-            self.logger.error('Broken tfc for file %s at site %s' % (lfn, site))
+            logging.error('Broken tfc for file %s at site %s' % (lfn, site))
             return None
 
         # Add the pfn key into pfn-to-lfn mapping

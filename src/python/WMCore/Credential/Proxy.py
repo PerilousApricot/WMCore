@@ -44,7 +44,7 @@ def execute_command( command, logger, timeout ):
     stdout, stderr = proc.communicate()
     rc = proc.returncode
 
-    logger.debug('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
+    logger.info('Executing : \n command : %s\n output : %s\n error: %s\n retcode : %s' % (command, stdout, stderr, rc))
 
     return stdout, rc
 
@@ -202,6 +202,7 @@ class Proxy(Credential):
         """
         Get the subject from cert file.
         """
+        self.logger.info("Getting subject from cert %s" % certFile)
         subject = ''
 
         if not certFile:
@@ -442,6 +443,7 @@ class Proxy(Credential):
         """
         Refresh/retrieve proxyFilename in/from myproxy.
         """
+        self.logger.info("calling logonRenewMyProxy with proxyfilname %s credserver %s" % (proxyFilename, credServerName))
         if not proxyFilename:
             proxyFilename = self.getProxyFilename( serverRenewer = True )
 
@@ -509,7 +511,10 @@ class Proxy(Credential):
             return
 
         vomsValid = '00:00'
-        timeLeft = int( timeLeft.strip() )
+        # take a minute off the timeleft. If we try to get it
+        # right on the nose, voms will complain and return 127 if the 
+        # requested voms validity is longer than the proxy validity
+        timeLeft = int( timeLeft.strip() ) - 60
 
         if timeLeft > 0:
             vomsValid = "%d:%02d" % ( timeLeft / 3600, ( timeLeft - ( timeLeft / 3600 ) *3600 ) / 60 )

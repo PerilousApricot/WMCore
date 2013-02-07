@@ -7,7 +7,7 @@ Refactoring of StageOutMgr -- for now, not accessed by default
 
 """
 
-import os
+import os, os.path
 import logging
 log = logging
 import traceback
@@ -331,7 +331,7 @@ class FileManager:
             newPfn = None
             try:
                 # FIXME add checksum stuff
-                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol, None  )
+                newPfn = stageOutSlave.doTransfer( localFileName, pfn, stageOut, seName, command, options, protocol, None )
             except StageOutError, ex:
                 log.info("Transfer failed in an expected manner. Exception is:")
                 log.info("%s" % str(ex))
@@ -417,12 +417,17 @@ class FileManager:
 class StageInMgr(FileManager):
     def __init__(self, numberOfRetries = 30, retryPauseTime=60, **overrideParams):
         FileManager.__init__(self, numberOfRetries = numberOfRetries, retryPauseTime=retryPauseTime, **overrideParams)
-    def __call__(self, fileToStage):
+    def __call__(self, LFN, PFN=None):
         """
         stages in a file, fileToStage is a dict with at least the LFN key
         the dict will be modified and returned, or an exception will be raised
+        These semantics blow to match what LogCollect wants
         """
-        return self.stageIn(fileToStage)
+        if not PFN:
+            PFN = os.path.join( os.getcwd(),
+                                os.path.split(LFN)[1] )
+        logging.info("Staging in file %s to %s" % (LFN, PFN))
+        return self.stageIn({ 'LFN' : LFN, 'PFN' : PFN })
 
 class StageOutMgr(FileManager):
     def __init__(self, numberOfRetries = 30, retryPauseTime=60, **overrideParams):

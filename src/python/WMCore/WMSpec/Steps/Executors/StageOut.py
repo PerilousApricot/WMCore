@@ -113,7 +113,7 @@ class StageOut(Executor):
 
         # Search through steps for report files
         filesTransferred = []
-
+        
         for step in self.stepSpace.taskSpace.stepSpaces():
             if step == self.stepName:
                 #Don't try to parse your own report; it's not there yet
@@ -140,6 +140,7 @@ class StageOut(Executor):
             # So getting all the files should get ONLY the files
             # for that step; or so I hope
             files = stepReport.getAllFileRefsFromStep(step = step)
+            logging.info("get file")
             for file in files:
                 if not hasattr(file, 'lfn') and hasattr(file, 'pfn'):
                     # Then we're truly hosed on this file; ignore it
@@ -149,13 +150,13 @@ class StageOut(Executor):
                 # Support direct-to-merge
                 # This requires pulling a bunch of stuff from everywhere
                 # First check if it's needed
-                if hasattr(self.step.output, 'minMergeSize') \
+                if ( hasattr(self.step.output, 'minMergeSize') \
                        and hasattr(file, 'size') \
-                       and not getattr(file, 'merged', False)
+                       and not getattr(file, 'merged', False) \
                        and not getattr(self.step.output, \
                                         'doNotDirectMerge', \
-                                        False):
-
+                                        False) ):
+                    logging.debug( "Considering direct to merge" )
                     if file.size >= self.step.output.minMergeSize:
                         # Then this goes direct to merge
                         try:
@@ -206,7 +207,7 @@ class StageOut(Executor):
                     stepReport.persist("Report.pkl")
 
 
-                logging.info("Lexicon passedd")
+                logging.info("Lexicon passed")
                 fileForTransfer = {'LFN': lfn,
                                    'PFN': getattr(file, 'pfn'),
                                    'SEName' : None,

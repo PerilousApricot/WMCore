@@ -52,7 +52,7 @@ class ConfigCache(WMObject):
 
         try:
             self.couchdb = CouchServer(self.dburl, usePYCurl=usePYCurl, ckey=ckey, cert=cert, capath=capath)
-            if self.dbname not in self.couchdb.listDatabases():
+            if not self.couchdb.databaseExists(self.dbname):
                 self.createDatabase()
 
             self.database = self.couchdb.connectDatabase(self.dbname)

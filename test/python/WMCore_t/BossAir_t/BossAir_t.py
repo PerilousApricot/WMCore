@@ -121,7 +121,7 @@ class BossAirTest(unittest.TestCase):
         resourceControl = ResourceControl()
         for site in self.sites:
             resourceControl.insertSite(siteName = site, seName = 'se.%s' % (site),
-                                       ceName = site, plugin = "CondorPlugin", pendingSlots = 1000,
+                                       ceName = site, plugin = "RemoteCondorPriorityPlugin", pendingSlots = 1000,
                                        runningSlots = 2000,
                                        cmsName = site)
             resourceControl.insertThreshold(siteName = site, taskType = 'Processing', \
@@ -142,24 +142,24 @@ class BossAirTest(unittest.TestCase):
                                    ceName = 'grid-ce-01.ba.infn.it', plugin = 'gLitePlugin',
                                    cmsName = 'infn.it')
         resourceControl.insertThreshold(siteName = 'grid-ce-01.ba.infn.it', taskType = 'Processing', \
-                                        maxSlots = 50)
+                                        maxSlots = 50, pendingSlots = 100)
         
         # using this for remotecondor submissions
         resourceControl.insertSite(siteName = 'fake-rcondor', seName = 'se.rcondor',
-                                   ceName = 'grid-ce-rcondor', plugin = 'RemoteCondorPlugin',
+                                   ceName = 'grid-ce-rcondor', plugin = 'RemoteCondorPriorityPlugin',
                                    pendingSlots = 1000,
                                    runningSlots = 2000,
                                    cmsName = 'fake-rcondor')
         resourceControl.insertThreshold(siteName = 'fake-rcondor', taskType = 'Processing', \
-                                        maxSlots = 1000)
+                                        maxSlots = 1000,pendingSlots=100)
         
         resourceControl.insertSite(siteName = 'fake-rcondor2', seName = 'se.rcondor2',
-                                   ceName = 'grid-ce-rcondor2', plugin = 'RemoteCondorPlugin',
+                                   ceName = 'grid-ce-rcondor2', plugin = 'RemoteCondorPriorityPlugin',
                                    pendingSlots = 1000,
                                    runningSlots = 2000,
                                    cmsName = 'fake-rcondor2')
         resourceControl.insertThreshold(siteName = 'fake-rcondor2', taskType = 'Processing', \
-                                        maxSlots = 1000)
+                                        maxSlots = 1000,pendingSlots=100)
         
         
 
@@ -218,7 +218,7 @@ class BossAirTest(unittest.TestCase):
 
 
         config.section_("BossAir")
-        config.BossAir.pluginNames = ['TestPlugin', 'RemoteCondorPlugin']
+        config.BossAir.pluginNames = ['TestPlugin', 'RemoteCondorPlugin','RemoteCondorPriorityPlugin']
         config.BossAir.pluginDir   = 'WMCore.BossAir.Plugins'
         config.BossAir.UISetupScript = '/afs/cern.ch/cms/LCG/LCG-2/UI/cms_ui_env.sh'
 

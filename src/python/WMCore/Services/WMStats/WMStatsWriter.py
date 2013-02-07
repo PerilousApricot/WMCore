@@ -26,7 +26,7 @@ def monitorDocFromRequestSchema(schema):
     doc["vo_group"] = schema.get('VoGroup', "")
     doc["vo_role"] = schema.get('VoRole', "")
     doc["user_dn"] = schema.get('RequestorDN', "")
-    doc["async_dest"] = schema.get('asyncDest', "")
+    doc["async_dest"] = schema.get('asyncDest', None) or schema.get('AsyncDest', None)
     doc["dbs_url"] = schema.get("DbsUrl", "")
     doc["publish_dbs_url"] = schema.get("PublishDbsUrl", "")
     doc["outputdatasets"] = schema.get('OutputDatasets', "")

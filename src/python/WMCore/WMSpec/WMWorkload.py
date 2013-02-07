@@ -647,16 +647,20 @@ class WMWorkloadHelper(PersistencyHelper):
                             processingString = task.getProcessingVersion()
 
                         if getattr(self.data.properties,"forceUserStorage",0) or taskType in analysisTaskTypes:
-                            unmergedLFN = "%s/%s" % (self.data.properties.unmergedLFNBase, getattr(outputModule, "primaryDataset"))
-                
+                            lfnStub = getattr(outputModule, "primaryDataset")
+                            
+                            #unmergedLFN = "%s/%s" % (self.data.properties.unmergedLFNBase, getattr(outputModule, "primaryDataset"))
+                            
                             if haveFilterName:
-                                unmergedLFN += "/%s-%s" % (task.getAcquisitionEra(), filterName)
+                                lfnStub += "/%s-%s" % (task.getAcquisitionEra(), filterName)
                             else:
-                                unmergedLFN += "/%s" % task.getAcquisitionEra()
+                                lfnStub += "/%s" % task.getAcquisitionEra()
                 
-                            unmergedLFN += "/%s" % processingString
-                            mergedLFN    = unmergedLFN
+                            lfnStub    += "/%s" % processingString
+                            mergedLFN   = "%s/%s" % (self.data.properties.mergedLFNBase, lfnStub)
+                            unmergedLFN = "%s/%s" % (self.data.properties.unmergedLFNBase, lfnStub)
                             lfnBase(unmergedLFN)
+                            lfnBase(mergedLFN)
                         else:
                             unmergedLFN = "%s/%s/%s/%s/%s" % (self.data.properties.unmergedLFNBase,
                                                               task.getAcquisitionEra(),

@@ -354,6 +354,16 @@ class DBSBufferFile(WMBSBase, WMFile):
         Sets the location of a file. If immediateSave is True, commit change to
         the DB immediately, otherwise queue for addition when save() is called.
         """
+        if not se:
+            logging.error("SE was none in dbs3bufferfile")
+
+        if self["newlocations"] == None:
+            logging.error("New locations was none!")
+            self["newlocations"] = set()
+        if self["locations"] == None:
+            logging.error("Locations was none!")
+            self["locations"] = set()
+
         if isinstance(se, str):
             self["newlocations"].add(se)
             self["locations"].add(se)

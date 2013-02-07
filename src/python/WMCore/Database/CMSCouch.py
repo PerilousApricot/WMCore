@@ -779,6 +779,18 @@ class CouchServer(CouchDBRequests):
         "List all the databases the server hosts"
         return self.get('/_all_dbs')
 
+    def databaseExists(self, dbname):
+        try:
+            return dbname in self.get('/_all_dbs')
+        except:
+            try:
+                self.get('/%s' % dbname)
+            except:
+                # the only acceptable answer is to not raise
+                return False
+            return True
+
+
     def createDatabase(self, dbname):
         """
         A database must be named with all lowercase characters (a-z),
@@ -804,7 +816,7 @@ class CouchServer(CouchDBRequests):
         database doesn't exist create it if create is True.
         """
         check_name(dbname)
-        if create and dbname not in self.listDatabases():
+        if create and not self.databaseExists(dbname):
             return self.createDatabase(dbname)
         return Database(dbname, self.url, size)
 
@@ -830,9 +842,9 @@ class CouchServer(CouchDBRequests):
         TODO: Improve source/destination handling - can't simply URL quote,
         though, would need to decompose the URL and rebuild it.
         """
-        if source not in self.listDatabases():
+        if not self.databaseExists(source):
             check_server_url(source)
-        if destination not in self.listDatabases():
+        if not self.databaseExists(destination):
             if create_target and not destination.startswith("http"):
                 check_name(destination)
             else:
@@ -848,9 +860,9 @@ class CouchServer(CouchDBRequests):
             if query_params:
                 data["query_params"] = query_params
         if useReplicator:
-            self.post('/_replicator', data)
+            print self.post('/_replicator', data)
         else:
-            self.post('/_replicate', data)
+            print self.post('/_replicate', data)
 
     def status(self):
         """

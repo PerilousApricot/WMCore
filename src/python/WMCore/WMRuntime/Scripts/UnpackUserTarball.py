@@ -80,7 +80,9 @@ def UnpackUserTarball():
             print "Fetching tarball %s through xrootd" % tarball
             try:
                 subprocess.check_call(['xrdcp', '-d', '1', '-f', tarball, 'TEMP_TARBALL.tgz'])
-                subprocess.check_call(['tar', 'xzf', 'TEMP_TARBALL.tgz'])
+                subprocess.check_call(['tar', 'xvzf', 'TEMP_TARBALL.tgz'])
+                subprocess.check_call(['ls', '-lahR'])
+                subprocess.check_call(['pwd'])
             except subprocess.CalledProcessError:
                 print "Couldn't retrieve/extract file from xrootd"
                 raise

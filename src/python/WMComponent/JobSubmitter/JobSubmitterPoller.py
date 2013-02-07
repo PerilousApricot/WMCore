@@ -443,6 +443,7 @@ class JobSubmitterPoller(BaseWorkerThread):
         self.sortedSites = sorted(rcThresholds.keys(),
                                   key = lambda x : rcThresholds[x]["total_pending_slots"],
                                   reverse = True)
+        #logging.info("looking at %s %s" % (self.sortedSites, rcThresholds))
         self.sortedSites = sorted(self.sortedSites, key = lambda x : rcThresholds[x]["cms_name"][0:2])
         logging.debug('Will fill in the following order: %s' % str(self.sortedSites))
 
@@ -545,7 +546,7 @@ class JobSubmitterPoller(BaseWorkerThread):
 
                     workflows = taskCache.keys()
                     # Sorting by timestamp on the subscription
-                    sortingKey = lambda x : self.workflowTimestamps[x]
+                    sortingKey = lambda x : self.workflowTimestamps[x] if x in self.workflowTimestamps else 0
                     workflows.sort(key = sortingKey)
 
                     for workflow in workflows:
@@ -641,7 +642,8 @@ class JobSubmitterPoller(BaseWorkerThread):
 
         # Remove workflows from the timestamp dictionary which are not anymore in the cache
         for workflow in workflowsToPrune:
-            del self.workflowTimestamps[workflow]
+            if workflow in self.workflowTimestamps:
+                del self.workflowTimestamps[workflow]
 
         logging.info("Have %s packages to submit." % len(jobsToSubmit))
         logging.info("Done assigning site locations.")

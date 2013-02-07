@@ -20,7 +20,7 @@ import WMCore.Storage.FileManager
 import WMCore.Storage.StageOutMgr as StageOutMgr
 import WMCore.Storage.StageInMgr  as StageInMgr
 import WMCore.Storage.DeleteMgr   as DeleteMgr
-from WMCore.Storage.StageOutError import StageOutFailure
+from WMCore.Storage.StageOutError import StageOutFailure,StageOutError
 
 from WMCore.Algorithms.Alarm import Alarm, alarmHandler
 
@@ -60,10 +60,10 @@ class LogCollect(Executor):
             overrides = self.step.override.dictionary_()
 
         # Set wait to over an hour
-        waitTime  = overrides.get('waitTime', 3600 + (self.step.retryDelay * self.step.retryCount))
-        seName    = overrides.get('seName',    "srm-cms.cern.ch")
-        lfnPrefix = overrides.get('lfnPrefix', "srm://srm-cms.cern.ch:8443/srm/managerv2?SFN=/castor/cern.ch/cms")
-        lfnBase   = overrides.get('lfnBase',   "/store/user/jsmith")
+        waitTime  = overrides.get('waitTime', 600 + (self.step.retryDelay * self.step.retryCount))
+        seName    = overrides.get('seName',    "se1.accre.vanderbilt.edu")
+        lfnPrefix = overrides.get('lfnPrefix', "srm://se1.accre.vanderbilt.edu:6288/srm/v2/server?SFN=/store/unmerged")
+        lfnBase   = overrides.get('lfnBase',   "/store/user/meloam")
         userLogs  = overrides.get('userLogs',  False)
         dontStage = overrides.get('dontStage', False)
 
@@ -71,7 +71,7 @@ class LogCollect(Executor):
                           "se-name": seName,  "lfn-prefix": lfnPrefix}
         
         #Okay, we need a stageOut Manager
-        useNewStageOutCode = False
+        useNewStageOutCode = True
         if getattr(self.step, 'newStageout', False) or \
             (overrides.has_key('newStageOut') and overrides.get('newStageOut')):
             useNewStageOutCode = True
@@ -89,18 +89,15 @@ class LogCollect(Executor):
                                     numberOfRetries = self.step.retryCount,
                                     **overrides)
                 stageInMgr = WMCore.Storage.FileManager.StageInMgr(
-                                    retryPauseTime  = self.step.retryDelay,
-                                    numberOfRetries = self.step.retryCount )
+                                    retryPauseTime  = 3,
+                                    numberOfRetries = 3 )
                 deleteMgr = WMCore.Storage.FileManager.DeleteMgr(
-                                    retryPauseTime  = self.step.retryDelay,
-                                    numberOfRetries = self.step.retryCount )
+                                    retryPauseTime  = 3,
+                                    numberOfRetries = 3 )
     
-                deleteMgr   = DeleteMgr.DeleteMgr()
-                stageInMgr  = StageInMgr.StageInMgr()
-                stageOutMgr = StageOutMgr.StageOutMgr(**stageOutParams)
         except StandardError, ex:
             msg = "Unable to load StageIn/Out/Delete Impl: %s" % str(ex)
-            logging.error(msg)
+            logging.exception(msg)
             raise WMExecutionFailure(60312, "MgrImplementationError", msg)
 
 
@@ -124,7 +121,7 @@ class LogCollect(Executor):
                     logging.error(msg)
                     self.report.addError(self.stepName, 60407, "LogCollectTimeout", msg)
                     self.report.persist("Report.pkl")
-                except StageOutFailure, ex:
+                except (StageOutError, StageOutFailure), ex:
                     msg = "Unable to StageIn %s" % file['LFN']
                     logging.error(msg)
                     # Don't do anything other then record it

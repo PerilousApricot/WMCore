@@ -307,6 +307,7 @@ class Service(dict):
                 else:
                     msg += ' raised a %s when accessed' % he.__repr__()
                 self['logger'].warning(msg)
+                self['logger'].warning(he)
                 raise he
             else:
                 cache_dead = cache_expired(cachefile, delta =  self.get('maxcachereuse', 24))

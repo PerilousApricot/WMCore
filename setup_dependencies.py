@@ -23,13 +23,13 @@ dependencies = {
                         'systems': ['wmc-base']
                         },
                 'wmc-database':{
-                        'packages': ['WMCore.Wrappers+', 'WMCore.GroupUser', 'WMCore.DataStructs', 'WMCore.Database',
+                        'packages': ['WMCore.Wrappers+', 'WMCore.GroupUser', 'WMCore.DataStructs+', 'WMCore.Database',
                                     'WMCore.Algorithms', 'WMCore.Services', 'WMCore.Cache'],
                         'modules': ['WMCore.Action', 'WMCore.WMConnectionBase', 'WMCore.DAOFactory', 'WMCore.WMInit'],
                         'systems':['wmc-base']
                         },
                 'wmc-runtime':{
-                        'packages': ['WMCore.WMRuntime', 'WMCore.WMSpec+', 'PSetTweaks', 'WMCore.FwkJobReport', 'WMCore.Storage+'],
+                        'packages': ['WMCore.WMRuntime+', 'WMCore.WMSpec+', 'PSetTweaks', 'WMCore.FwkJobReport', 'WMCore.Storage+'],
                         'modules' : ['WMCore.Algorithms.ParseXMLFile'],
                         'systems':['wmc-base']
                         },
@@ -46,6 +46,7 @@ dependencies = {
                         },
                 'reqmgr':{
                         'packages': ['WMCore.RequestManager+',
+                                     'WMCore.RequestManager.RequestDB+',
                                      'WMCore.HTTPFrontEnd',
                                      'WMCore.HTTPFrontEnd.RequestManager+',
                                      'WMCore.HTTPFrontEnd.GlobalMonitor+',
@@ -54,7 +55,8 @@ dependencies = {
                                      'WMCore.Services.WMBS',
                                      'WMCore.Services.WMAgent',
                                      'WMCore.Services.Dashboard',
-                                     'WMCore.Services.WMStats'],
+                                     'WMCore.Services.WMStats',
+                                     'WMCore.Services.PhEDEx'],
 
                         'systems':['wmc-web', 'wmc-runtime'],
                         'statics': ['src/templates/WMCore/WebTools/RequestManager',
@@ -80,18 +82,27 @@ dependencies = {
                         'statics': ['src/couchapps/WorkQueue+'],
                         },
                 'wmagent':{
+                        'bin': ['wmagent-resource-control'],
                         'packages': ['WMCore.Agent+', 'WMCore.Algorithms+',
                                     'WMCore.JobStateMachine', 'WMComponent+',
                                     'WMCore.HTTPFrontEnd+', 'WMCore.ThreadPool',
                                     'WMCore.BossAir+', 'WMCore.Credential',
                                     'WMCore.JobSplitting+', 'WMCore.ProcessPool',
                                     'WMCore.Services+', 'WMCore.WMSpec+',
-                                    'WMCore.WMBS+', 'WMCore.ResourceControl+'],
+                                    'WMCore.WMBS+', 'WMCore.ResourceControl+',
+                                    'WMCore.RequestManager',
+                                    'WMCore.RequestManager.RequestDB+'],
                         'systems':['wmc-web', 'wmc-database', 'workqueue', 'wmc-runtime'],
                         'statics': ['src/javascript/WMCore/WebTools/Agent',
                                     'src/javascript/WMCore/WebTools/WMBS',
                                     'src/javascript/external/graphael',
-                                    'src/templates/WMCore/WebTools/WMBS'],
+                                    'src/templates/WMCore/WebTools/WMBS',
+                                    'src/couchapps/JobDump+',
+                                    'src/couchapps/FWJRDump+',
+                                    'src/couchapps/WMStats+',
+                                    'src/couchapps/ACDC+',
+                                    'src/couchapps/WorkloadSummary+',
+                                    'src/couchapps/GroupUser+'],
                         },
                 'asyncstageout':{
                         'packages': ['WMCore.Agent+', 'WMCore.Storage+',

@@ -90,7 +90,7 @@ class FrontEndAuth(cherrypy.Tool):
         user is allowed to access."""
         if authzfunc == None:
             authzfunc = self.defaultAuth
-
+        print "check authz: %s %s %s %s" % (cherrypy.request.user, role, group, site)
         # TOFIX: put role, group and site into canonical form
 
         # Turns arguments into lists

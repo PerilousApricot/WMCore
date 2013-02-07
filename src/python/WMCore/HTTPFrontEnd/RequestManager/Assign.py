@@ -57,7 +57,8 @@ class Assign(WebAPI):
              "Resubmission" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/data", "/store/hidata"],
              "MonteCarloFromGEN" : ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/himc"],
              "TaskChain": ["/store/backfill/1", "/store/backfill/2", "/store/mc", "/store/data", "/store/relval"],
-             "LHEStepZero": ["/store/backfill/1", "/store/backfill/2", "/store/generator"]}
+             "LHEStepZero": ["/store/backfill/1", "/store/backfill/2", "/store/generator"],
+             "MeloProcessing" : ["/store/user/"]}
 
         self.yuiroot = config.yuiroot
         cherrypy.engine.subscribe('start_thread', self.initThread)
@@ -172,6 +173,7 @@ class Assign(WebAPI):
     @cherrypy.tools.secmodv2(role=Utilities.security_roles(), group = Utilities.security_groups())
     def handleAssignmentPage(self, **kwargs):
         """ handler for the main page """
+        print "entering hasassignment"
         #Accept Json encoded strings
         decodedArgs = {}
         for key in kwargs.keys():
@@ -216,10 +218,17 @@ class Assign(WebAPI):
         """ Make all the necessary changes in the Workload to reflect the new assignment """
         request = GetRequest.getRequestByName(requestName)
         helper = Utilities.loadWorkload(request)
+        logging.error(kwargs)
         for field in ["AcquisitionEra", "ProcessingVersion"]:
-            if type(kwargs[field]) == dict:
+            if not field in kwargs or (kwargs[field] == None):
+                # There wasn't one in the request, not the end of the world
+                kwargs[field] = None
+            elif type(kwargs[field]) == dict:
                 for value in kwargs[field].values():
                     self.validate(value, field)
+            elif type(kwargs[field]) == int:
+                kwargs[field] = "%s" % kwargs[field]
+                self.validate(kwargs[field], field)
             else:
                 self.validate(kwargs[field], field)
         # Set white list and black list
@@ -231,7 +240,7 @@ class Assign(WebAPI):
         helper.setProcessingVersion(kwargs["ProcessingVersion"])
         helper.setAcquisitionEra(kwargs["AcquisitionEra"])
         #FIXME not validated
-        helper.setLFNBase(kwargs["MergedLFNBase"], kwargs["UnmergedLFNBase"])
+        helper.setLFNBase(kwargs["MergedLFNBase"], kwargs["UnmergedLFNBase"], kwargs.get("ForceUserStorage", 0))
         helper.setMergeParameters(int(kwargs.get("MinMergeSize", 2147483648)),
                                   int(kwargs.get("MaxMergeSize", 4294967296)),
                                   int(kwargs.get("MaxMergeEvents", 50000)))

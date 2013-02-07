@@ -42,18 +42,6 @@ def getTestArguments():
 
     return arguments
 
-def remoteLFNPrefix(site, lfn=''):
-    """
-    Convert a site name to the relevant remote LFN prefix
-    """
-    from WMCore.Services.PhEDEx.PhEDEx import PhEDEx
-    phedexJSON = PhEDEx(responseType='json')
-
-    seName = phedexJSON.getNodeSE(site)
-    uri = phedexJSON.getPFN(nodes=[site], lfns=[lfn])[(site,lfn)]
-
-    return uri.replace(lfn, ''), seName # Don't want the actual LFN, just prefix
-
 class MeloProcessingWorkloadFactory(StdBase):
     """
     _MeloProcessingWorkloadFactory_
@@ -108,8 +96,6 @@ class MeloProcessingWorkloadFactory(StdBase):
         
         # but send the collected tarballs to the right ASO place
         self.logCollBase = '/store/user/%s/YAAT-logs/' % self.userName
-        self.lcPrefix, self.seName = remoteLFNPrefix(site=self.asyncDest,
-                                                     lfn=self.logCollBase)
         
     
     def buildWorkload(self, jobType):
@@ -200,19 +186,14 @@ class MeloProcessingWorkloadFactory(StdBase):
                     # intended to remain a temporary file
                     step.setPreserveLFN( True )
 
-        # TODO this should definitely be ASO
-        logCollectTask = self.addLogCollectTask(procTask)
-        logCollectStep = logCollectTask.getStep('logCollect1')
-        logCollectStep.addOverride('userLogs',  True)
-#        logCollectStep.addOverride('seName', "se1.accre.vanderbilt.edu")
-#        logCollectStep.addOverride('lfnBase', self.logCollBase)
-#        logCollectStep.addOverride('lfnPrefix', self.lcPrefix)
-#        logCollectStep.addOverride('dontStage', False)
-
+        # TODO logCollect should definitely be ASO
+        tasksForLogCollect = [procTask]
+        
         procMergeTasks = {}
         for outputModuleName in outputMods.keys():
             mergeTask = self.addMergeTask(procTask, self.procJobSplitAlgo,
                                           outputModuleName)
+            tasksForLogCollect.append(mergeTask)
             for stepName in mergeTask.listAllStepNames():
                 step = mergeTask.getStep( stepName )
                 if step.stepType() == 'StageOut' and asoMerged:
@@ -220,9 +201,20 @@ class MeloProcessingWorkloadFactory(StdBase):
                     step.setAsyncDest(self.asyncDest)
                     step.setUserRoleAndGroup(self.owner_vogroup,
                                                self.owner_vorole)
-
             procMergeTasks[outputModuleName] = mergeTask
         
+        tasksNeedingLogCollect = []
+        for tasksForLogCollect in tasksNeedingLogCollect:
+            logCollectTask = self.addLogCollectTask(taskForLogCollect)
+            logCollectStep = logCollectTask.getStep('logCollect1')
+            logCollectStep.addOverride('userLogs',  True)
+            logCollectStep.setNewStageoutOverride(True)
+            logCollectStep.addOverride('seName', "se1.accre.vanderbilt.edu")
+            logCollectStep.addOverride('lfnBase', self.logCollBase)
+            logCollectStep.addOverride('lfnPrefix', self.lcPrefix)
+            logCollectStep.addOverride('dontStage', False)
+
+
         # do a final munge of the lfn bases
         workload.setLFNBase( self.mergedLFNBase, self.unmergedLFNBase )
         return workload
@@ -324,40 +316,8 @@ class MeloProcessingWorkloadFactory(StdBase):
                                                     couchDBName = schema["CouchDBName"],
                                                     getOutputModules = True)
 
-        if schema.get("ProdJobSplitAlgo", "EventBased") == "EventBased":
-            self.validateEventBasedParameters(schema = schema)
-
-        return
-
-
-    def validateEventBasedParameters(self, schema):
-        """
-        _validateEventBasedParameters_
-
-        Validate the EventBased splitting job parameters
-        """
-        # First, see if they passed stuff in
-        if schema.get("ProdJobSplitArgs", None):
-            if not schema["ProdJobSplitArgs"].has_key("events_per_job"):
-                msg = "Workflow submitted with invalid ProdJobSplitArgs to match SplitAlgo"
-                self.raiseValidationException(msg = msg)
-            if not int(schema["ProdJobSplitArgs"]['events_per_job']) > 0:
-                msg = "Invalid number of events_per_job entered by user"
-                self.raiseValidationException(msg = msg)
-        else:
-            # Get the default arguments
-            timePerEvent     = int(schema.get("TimePerEvent", 60))
-            filterEfficiency = float(schema.get("FilterEfficiency", 1.0))
-            totalTime        = int(schema.get("TotalTime", 9 * 3600))
-
-            if not totalTime > 0:
-                self.raiseValidationException(msg = "Negative total time for MC workflow")
-            if not filterEfficiency > 0.0:
-                self.raiseValidationException(msg = "Negative filter efficiency for MC workflow")
-            if not timePerEvent > 0:
-                self.raiseValidationException(msg = "Negative time per event for MC workflow")
-            if not int(totalTime/timePerEvent/filterEfficiency) > 0:
-                self.raiseValidationException(msg = "No events created in MC workflow")
+        #if schema.get("ProdJobSplitAlgo", "EventBased") == "EventBased":
+        #    self.validateEventBasedParameters(schema = schema)
 
         return
 

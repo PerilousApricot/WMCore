@@ -113,7 +113,7 @@ class StageOut(Executor):
 
         # Search through steps for report files
         filesTransferred = []
-
+        
         for step in self.stepSpace.taskSpace.stepSpaces():
             if step == self.stepName:
                 #Don't try to parse your own report; it's not there yet
@@ -140,6 +140,7 @@ class StageOut(Executor):
             # So getting all the files should get ONLY the files
             # for that step; or so I hope
             files = stepReport.getAllFileRefsFromStep(step = step)
+            logging.info("get file")
             for file in files:
                 if not hasattr(file, 'lfn') and hasattr(file, 'pfn'):
                     # Then we're truly hosed on this file; ignore it
@@ -149,15 +150,13 @@ class StageOut(Executor):
                 # Support direct-to-merge
                 # This requires pulling a bunch of stuff from everywhere
                 # First check if it's needed
-                if hasattr(self.step.output, 'minMergeSize') \
+                if ( hasattr(self.step.output, 'minMergeSize') \
                        and hasattr(file, 'size') \
-                       and not getattr(file, 'merged', False):
-
-                    # We need both of those to continue, and we don't
-                    # direct-to-merge
-                    if getattr(self.step.output, 'doNotDirectMerge', False):
-                        # Then we've been told explicitly not to do direct-to-merge
-                        continue
+                       and not getattr(file, 'merged', False) \
+                       and not getattr(self.step.output, \
+                                        'doNotDirectMerge', \
+                                        False) ):
+                    logging.debug( "Considering direct to merge" )
                     if file.size >= self.step.output.minMergeSize:
                         # Then this goes direct to merge
                         try:
@@ -188,15 +187,27 @@ class StageOut(Executor):
                                 stepReport.addError(self.stepName, 60402,
                                                     "DirectToMergeFailure", str(ex))
 
+                
                 # Save the input PFN in case we need it
                 # Undecided whether to move file.pfn to the output PFN
                 file.InputPFN   = file.pfn
                 lfn = getattr(file, 'lfn')
                 fileSource = getattr(file, 'Source', None)
-                if fileSource in ['TFileService', 'UserDefined']:
-                    userLfnRegEx(lfn)
-                else:
-                    lfnRegEx(lfn)
+                logging.info("Checking lfn against lexicon: %s" % lfn)
+                try:
+                    if fileSource in ['TFileService', 'UserDefined']:
+                        userLfnRegEx(lfn)
+                    else:
+                        lfnRegEx(lfn)
+                except AssertionError, ex:
+                    msg = "Lexicon failed for lfn %s" % lfn
+                    logging.error(msg)
+                    stepReport.addError(self.stepName, 60403,
+                                        "StageOutBadLfn", msg)
+                    stepReport.persist("Report.pkl")
+
+
+                logging.info("Lexicon passed")
                 fileForTransfer = {'LFN': lfn,
                                    'PFN': getattr(file, 'pfn'),
                                    'SEName' : None,
@@ -279,14 +290,17 @@ class StageOut(Executor):
             files = stepReport.getAllFileRefsFromStep(step = step)
             for file in files:
 
-                if not hasattr(file, 'lfn') or not hasattr(file, 'location') or \
-                       not hasattr(file, 'guid'):
+                if not hasattr(file, 'lfn') or \
+                        not hasattr(file, 'guid') or \
+                        not hasattr(file, 'location'):
                     continue
 
                 file.user_dn = getattr(self.step, "userDN", None)
                 file.async_dest = getattr(self.step, "asyncDest", None)
                 file.user_vogroup = getattr(self.step, "owner_vogroup", '')
                 file.user_vorole = getattr(self.step, "owner_vorole", '')
+                # Propagate that we want to preserve the lfn across ASO
+                file.preserve_lfn = getattr( self.step, 'preserveLFN', False)
 
             stepReport.persist(reportLocation)
 

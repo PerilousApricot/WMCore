@@ -63,6 +63,10 @@ class FeederManagerTest(unittest.TestCase):
         config = self.testInit.getConfiguration()
         self.testInit.generateWorkDir(config)
 
+        config.section_("JobStateMachine")
+        config.JobStateMachine.couchurl = os.getenv("COUCHURL")
+        config.JobStateMachine.couchDBName = "jobaccountant_t"
+
         config.component_("FeederManager")
         config.FeederManager.logLevel = "INFO"
         config.FeederManager.componentName = "FeederManager"

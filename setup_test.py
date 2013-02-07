@@ -96,13 +96,12 @@ if can_nose:
         will replace os._exit() and throw an exception instead
         """
         if hasattr( threading.local(), "isMain" ) and threading.local().isMain:
-            # The main thread should raise an exception
-            sys.stderr.write("*******EXIT WAS TRAPPED**********\n")
-            raise RuntimeError, "os._exit() was called in the main thread"
-        else:        
-            # os._exit on child threads should just blow away the thread
-            raise SystemExit, "os._exit() was called in a child thread. " +\
-                              "Protecting the interpreter and trapping it"
+            # only trap the main thread
+            print "*******EXIT WAS TRAPPED**********"
+            raise RuntimeError, "os._exit() was called, we trapped it for testing"
+        else:
+            # subthreads can behave the same
+            os.DMWM_REAL_EXIT( code )
 
     class DetailedOutputter(Plugin):
         name = "detailed"
@@ -213,7 +212,7 @@ if can_nose:
                 if int(id) >= int(self.testMinimumIndex) and int(id) <= int(self.testMaximumIndex):
                     # generate a stable ID for sorting
                     if len(testIds[id]) == 3:
-                        testName = "%s%s" % (testIds[id][1], testIds[id][2])
+                        testName = testIds[id][1] + testIds[id][2]
                         testHash = hashlib.md5( testName ).hexdigest()
                         hashSnip = testHash[:7]
                         hashInt  = int( hashSnip, 16 )

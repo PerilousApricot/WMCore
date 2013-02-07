@@ -64,7 +64,7 @@ class WorkQueueBackend(object):
         """Replicate from parent couch - blocking"""
         try:
             if self.parentCouchUrl and self.queueUrl:
-                self.server.replicate(source = self.parentCouchUrl,
+                print "replicate %s" % self.server.replicate(source = self.parentCouchUrl,
                                       destination = "%s/%s" % (self.hostWithAuth, self.inbox.name),
                                       filter = 'WorkQueue/queueFilter',
                                       query_params = {'childUrl' : self.queueUrl, 'parentUrl' : self.parentCouchUrl},
@@ -76,7 +76,7 @@ class WorkQueueBackend(object):
         """Replicate to parent couch - blocking"""
         try:
             if self.parentCouchUrl and self.queueUrl:
-                self.server.replicate(source = "%s/%s" % (self.db['host'], self.inbox.name),
+                print "other replicate %s" % self.server.replicate(source = "%s/%s" % (self.db['host'], self.inbox.name),
                                       destination = self.parentCouchUrlWithAuth,
                                       filter = 'WorkQueue/queueFilter',
                                       query_params = {'childUrl' : self.queueUrl, 'parentUrl' : self.parentCouchUrl},

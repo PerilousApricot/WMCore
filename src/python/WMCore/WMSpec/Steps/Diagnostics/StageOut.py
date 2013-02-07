@@ -28,7 +28,7 @@ class SOMExceptionHandler(DiagnosticHandler):
 
         """
         msg         = "Error in StageOut: %s\n" % (errCode)
-        description = "Misc. StageOut error: %s\n" % (errCode)
+        description = "Misc. StageOut error: %s" % (errCode)
         if args.get('ex', None):
             msg += str(args.get('ex'))
         if args.get('ExceptionInstance', False):

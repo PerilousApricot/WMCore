@@ -209,7 +209,7 @@ class AccountantWorker(WMConnectionBase):
         """
         returnList = []
         self.reset()
-
+        
         for job in parameters:
             logging.info("Handling %s" % job["fwjr_path"])
 
@@ -232,7 +232,9 @@ class AccountantWorker(WMConnectionBase):
                     asoOutputCount = 0
                 else:
                     asoOutputCount = self.countASOOutputs(fwkJobReport)
-                    
+                    if asoOutputCount != 0:
+                        print "Waiting on %s ASO files" % asoOutputCount
+                   
                 if asoOutputCount == 0:
                     # all the files are in the right place
                     self.handleSuccessful(jobID = job["id"],
@@ -293,6 +295,10 @@ class AccountantWorker(WMConnectionBase):
         # Finally, if some jobs need to move their files, wait till they're moved before
         # we report on their status
         if len(self.listOfJobsNeedingASO) > 0:
+            outcomeBinds = [{'jobid': x['id'], 'outcome': x['outcome']} for x in self.listOfJobsNeedingASO]
+            self.setBulkOutcome.execute(binds = outcomeBinds,
+                                        conn = self.getDBConn(),
+                                        transaction = self.existingTransaction())
             self.stateChanger.propagate(self.listOfJobsNeedingASO, "asopending", "complete")
 
         # Straighten out DBS Parentage
@@ -359,6 +365,9 @@ class AccountantWorker(WMConnectionBase):
             newRun.extend(run.lumis)
             dbsFile.addRun(newRun)
 
+        if None in jobReportFile['locations']:
+            logging.error("Got a file with a none location\n%s" % jobReportFile)
+            jobReportFile['locations'] = set('T9_US_Mordor')
 
         dbsFile.setLocation(se = list(jobReportFile["locations"])[0], immediateSave = False)
         self.dbsFilesToCreate.append(dbsFile)
@@ -425,16 +434,23 @@ class AccountantWorker(WMConnectionBase):
 
     def _mapLocation(self, fwkJobReport):
         for file in fwkJobReport.getAllFileRefs():
-            if file and hasattr(file, 'location'):
+            if isinstance(getattr(file, 'location', None), type([])):
+                file.location = file.location[0]
+            print "location is %s" % getattr(file, 'location', "UNSET")
+            if file and hasattr(file, 'location') and \
+                    (file.location and not file.location.startswith('T')):
+                print "location swas %s" % file.location
                 file.location = self.phedex.getBestNodeName(file.location, self.locLists)
+                print "Location changed to %s" % file.location
 
     def countASOOutputs(self, fwkJobReport):
         count = 0
         fileList = fwkJobReport.getAllFiles()
         for fwjrFile in fileList:
-            if getattr(fwjrFile, "async_dest", None) and \
-               fwjrFile['async_dest'] and \
-                string.lower(getattr(fwjrFile, "asyncStatus", "")) != "success":
+            fileStatus = string.lower( "%s" % fwjrFile.get("asyncStatus") )
+            if (fwjrFile.get("asyncDest") or
+                    fwjrFile.get("async_dest")) and \
+                fileStatus != "success":
                 # means we have an async target and it hasn't been moved yet
                 count += 1
         return count
@@ -494,6 +510,42 @@ class AccountantWorker(WMConnectionBase):
         """
         wmbsJob = Job(id = jobID)
         wmbsJob.load()
+        wmbsJob["outcome"] = "transferring"
+        wmbsJob["fwjr"] = fwkJobReport
+        #wmbsJob.getMask()
+        outputID = wmbsJob.loadOutputID()
+
+        #wmbsJob["fwjr"] = fwkJobReport
+
+        #outputMap = self.getOutputMapAction.execute(jobID = jobID,
+        #                                            conn = self.getDBConn(),
+        #                                            transaction = self.existingTransaction())
+
+        #jobType = self.getJobTypeAction.execute(jobID = jobID,
+        #                                        conn = self.getDBConn(),
+        #                                        transaction = self.existingTransaction())
+
+        #fileList = fwkJobReport.getAllFiles()
+
+        #for fwjrFile in fileList:
+            #wmbsFile = self.addFileToWMBS(jobTypefwjrFile,wmbsJob["mask"],
+                                        #jobID = jobID,
+                                        #task = fwkJobReport.getTaskName())
+            #merged = fwjrFile['merged']
+            #moduleLabel = fwjrFile["module_label"]
+
+            #if merged:
+            #    self.mergedOutputFiles.append(wmbsFile)
+
+            #self.filesetAssoc.append({"lfn": wmbsFile["lfn"], "fileset": outputID})
+            #outputFilesets = self.outputFilesetsForJob(outputMap, merged, moduleLabel)
+            #for outputFileset in outputFilesets:
+            #    self.filesetAssoc.append({"lfn": wmbsFile["lfn"], "fileset": outputFileset})
+
+        # Only save once job is done, and we're sure we made it through okay
+        # but we need to remember to update the fwjr to convert ses to locations
+        self._mapLocation(wmbsJob['fwjr'])
+        wmbsJob['fwjr'].save(fwkJobReportPath)
         self.listOfJobsNeedingASO.append(wmbsJob)
 
         return
@@ -738,8 +790,9 @@ class AccountantWorker(WMConnectionBase):
         fileCksumBinds = []
         fileLocations  = []
         fileCreate     = []
-
+        print "ENTAR LOOP"
         for wmbsFile in self.wmbsFilesToBuild:
+            print "***HANDLEWMBSFILES*** %s " % wmbsFile
             lfn           = wmbsFile['lfn']
             if lfn == None:
                 continue

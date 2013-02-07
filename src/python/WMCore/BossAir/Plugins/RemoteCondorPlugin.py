@@ -392,7 +392,6 @@ class RemoteCondorPlugin(BasePlugin):
         wrapscp = "%s %s %s" % (wrapper, self.scp, " ".join(self.gsisshOptions))
         commands = []
         for onefile in targetFiles:
-            logging.error("Checking this exists ->%s<-" % onefile[0])
             assert os.path.exists( onefile[0] )
             commands.append('%s %s %s:%s' % \
                             (wrapscp, onefile[0], self.remoteUserHost, onefile[1]))
@@ -583,12 +582,9 @@ class RemoteCondorPlugin(BasePlugin):
             line = jdlList[index]
             if line.startswith('x509userproxy'):
                 proxyFile = line.split(' = ')[1].rstrip()
-                logging.info("splitting %s " % line)
-                logging.info("got this %s" % proxyFile)
                 remoteProxy = "%s/%s" % (inputPrefix, 'proxy.cert')
                 reqFiles.append( (proxyFile, remoteProxy) )
                 jdlList[index] = 'x509userproxy = %s\n' % remoteProxy
-                logging.error("did this to proxy: %s" % jdlList[index])       
 
         reqDirs.extend( outDirs )
         # make a JDL
@@ -601,7 +597,6 @@ class RemoteCondorPlugin(BasePlugin):
         remoteJDL = "%s/%s" % (inputPrefix, os.path.basename(jdlFile))
         reqFiles.append( ( jdlFile, remoteJDL ) )
         reqFiles.append( ( self.scriptFile, remoteSub ))
-        print "\n".join(jdlList)
 
         if not jdlList or jdlList == []:
             # Then we got nothing
@@ -765,7 +760,7 @@ class RemoteCondorPlugin(BasePlugin):
             return runningList, changeList, completeList
         if len(jobInfo.keys()) == 0:
             noInfoFlag = True
-
+        logging.info("Attempting to track %s jobs" % len(jobs))
         for job in jobs:
             # Now go over the jobs from WMBS and see what we have
             if not job['jobid'] in jobInfo.keys():

@@ -31,7 +31,7 @@ def discardConflictingDocument(couchDbInstance, data, result):
     """
 
     conflictingId = result["id"]
-
+    logging.error("discarding conflict for %s" % conflictingId)
     try:
         if not couchDbInstance.documentExists(conflictingId):
             # It doesn't exist, this is odd
@@ -48,7 +48,16 @@ def discardConflictingDocument(couchDbInstance, data, result):
                 doc["_rev"] = originalDocRev
                 retval = couchDbInstance.commitOne(doc)
                 break
-
+        
+        import pprint
+        logging.info("resolving conflict with %s" % doc["_id"])
+        logging.info(pprint.pformat(couchDbInstance.document(conflictingId)['_rev']))
+        for doc in data['docs']:
+            if doc['_id'] == conflictingId:
+                logging.info(pprint.pformat(doc.get('_rev', None)))
+        logging.info('done with docs')
+        logging.info(pprint.pformat(couchDbInstance.document(conflictingId)['_rev']))
+        logging.info(retval)
         return retval
     except CouchError, ex:
         logging.error("Couldn't resolve conflict when updating document with id %s" % result["id"])
@@ -252,7 +261,8 @@ class ChangeState(WMObject, WMConnectionBase):
                                                                                     timestamp)
                 self.jsumdatabase.makeRequest(uri = updateUri, type = "PUT", decode = False)
                 logging.debug("Updated job summary state history for job %s" % jobSummaryId)
-
+            
+            logging.info("examining FWJR %s" % job.get("fwjr", None))
             if job.get("fwjr", None):
 
                 # If there are too many input files, strip them out
@@ -273,7 +283,8 @@ class ChangeState(WMObject, WMConnectionBase):
                                 "retrycount": job["retry_count"],
                                 "fwjr": job["fwjr"].__to_json__(None),
                                 "type": "fwjr"}
-                self.fwjrdatabase.queue(fwjrDocument, timestamp = True, callback = discardConflictingDocument)
+                logging.info('queueing up %s' % fwjrDocument)
+                logging.info("Queueing fwjr docs %s " %self.fwjrdatabase.queue(fwjrDocument, timestamp = True, callback = discardConflictingDocument))
 
                 jobSummaryId = job["name"]
                 # building a summary of fwjr
@@ -292,12 +303,33 @@ class ChangeState(WMObject, WMConnectionBase):
                 for singlestep in job["fwjr"].listSteps():
                     for singlefile in job["fwjr"].getAllFilesFromStep(step=singlestep):
                         if singlefile:
-                            outputs.append({'type': 'output' if CMSSTEP.match(singlestep) else singlefile.get('module_label', None),
-                                            'lfn': singlefile.get('lfn', None),
-                                            'location': list(singlefile.get('locations', set([]))) if len(singlefile.get('locations', set([]))) > 1
-                                                                                                   else singlefile['locations'].pop(),
-                                            'checksums': singlefile.get('checksums', {}),
-                                            'size': singlefile.get('size', None) })
+                            if CMSSTEP.match(singlestep):
+                                outputType = 'output'
+                            else:
+                                outputType = singlefile.get('module_label', None)
+
+                            if len(singlefile.get('locations', set([]))) > 1:
+                                outputLocation = list(singlefile.get('locations', set([])))
+                            else:
+                                outputLocation = singlefile['locations'].pop()
+
+                            tempDict = { 'type' : outputType,
+                                         'lfn' : singlefile.get('lfn', None),
+                                         'location' : outputLocation,
+                                         'checksums' : singlefile.get('checksums', {}),
+                                         'size' : singlefile.get('size', None) }
+
+                            if singlefile.get('async_dest', None) != None:
+                                tempDict['asyncDest'] = singlefile.get('async_dest')
+                                tempDict['preserveLFN'] = singlefile.get('preserveLFN', False)
+                                print "got async_dest: %s" % tempDict['location']
+
+                            elif singlefile.get('asyncDest', None) != None:
+                                tempDict['asyncDest'] = singlefile.get('asyncDest')
+                                tempDict['preserveLFN'] = singlefile.get('preserveLFN', False)
+                                print "got asyncDest: %s" % tempDict['location']
+
+                            outputs.append(tempDict)
                             #it should have one output dataset for all the files
                             outputDataset = singlefile.get('dataset', None) if not outputDataset else outputDataset
                 inputFiles = []
@@ -339,7 +371,7 @@ class ChangeState(WMObject, WMConnectionBase):
                                      transaction = self.existingTransaction())
 
         self.jobsdatabase.commit(callback = discardConflictingDocument)
-        self.fwjrdatabase.commit(callback = discardConflictingDocument)
+        logging.info("committing fwjrdocs %s" %self.fwjrdatabase.commit(callback = discardConflictingDocument))
         self.jsumdatabase.commit()
         return
 

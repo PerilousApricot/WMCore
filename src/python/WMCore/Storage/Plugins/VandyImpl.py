@@ -71,7 +71,9 @@ class VandyImpl(StageOutImplV2):
         if stageOut:
             self.createOutputDirectory(os.path.dirname(dstPath))
         else:
-            os.makedirs(os.path.dirname(dstPath))
+            targetDir = os.path.dirname(toPfn)
+            if not os.path.exists(targetDir):
+                os.makedirs(targetDir)
 
         # Does the copy
         if stageOut:
@@ -86,7 +88,7 @@ class VandyImpl(StageOutImplV2):
         if exitCode != 0:
             logging.error("Error in file transfer:")
             logging.error(output)
-            raise StageOutError, "Transfer failure, command %s, error %s" % (command, output)
+            raise StageOutError, "Transfer failure, exit code %s, command %s, error %s" % (command, exitCode, output)
 
         # Returns the path
         return dstPath

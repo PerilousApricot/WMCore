@@ -81,6 +81,7 @@ def buildWorkloadForRequest(typename, schema):
             factoryInstance = getattr(mod, factoryName)
         except ImportError:
             msg =  "Spec type %s not found in WMCore.WMSpec.StdSpecs" % typename
+            raise
             raise RuntimeError, msg
         except AttributeError, ex:
             msg = "Factory not found in Spec for type %s" % typename

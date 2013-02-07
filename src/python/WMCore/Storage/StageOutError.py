@@ -6,9 +6,7 @@ General Exception class for JC modules
 
 """
 
-
-
-
+import traceback
 import inspect
 import sys
 
@@ -30,7 +28,6 @@ class StageOutError(WMException):
     """
     def __init__(self, message, **data):
         WMException.__init__(self, message, **data)
-
         self.data.setdefault("ErrorCode", 60311)
         self.data.setdefault("ErrorType", ErrorDefinitions[60311])
 

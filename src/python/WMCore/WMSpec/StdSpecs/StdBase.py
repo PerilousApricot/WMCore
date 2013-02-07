@@ -65,6 +65,7 @@ class StdBase(object):
         self.siteWhitelist = []
         self.unmergedLFNBase = None
         self.mergedLFNBase = None
+        self.forceUserStorage = False
         self.minMergeSize = 2147483648
         self.maxMergeSize = 4294967296
         self.maxWaitTime = 24 * 3600
@@ -91,6 +92,10 @@ class StdBase(object):
         self.procScenario = None
         self.enableHarvesting = True
         self.enableNewStageout = False
+        self.asyncDest = None
+        self.owner_vogroup = "DEFAULT"
+        self.owner_vorole = "DEFAULT"
+        self.stepType = "CMSSW"
         return
 
     def __call__(self, workloadName, arguments):
@@ -117,6 +122,7 @@ class StdBase(object):
         self.siteWhitelist = arguments.get("SiteWhitelist", [])
         self.unmergedLFNBase = arguments.get("UnmergedLFNBase", "/store/unmerged")
         self.mergedLFNBase = arguments.get("MergedLFNBase", "/store/data")
+        self.forceUserStorage = arguments.get("ForceUserStorage", False)
         self.minMergeSize = arguments.get("MinMergeSize", 2147483648)
         self.maxMergeSize = arguments.get("MaxMergeSize", 4294967296)
         self.maxWaitTime = arguments.get("MaxWaitTime", 24 * 3600)
@@ -136,6 +142,18 @@ class StdBase(object):
         self.dqmSequences = arguments.get("DqmSequences", [])
         self.dqmConfigCacheID = arguments.get("DQMConfigCacheID", None)
         self.procScenario = arguments.get("ProcScenario", None)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
+        self.enableHarvesting = arguments.get("EnableHarvesting", True)
+        self.enableNewStageout = arguments.get("EnableNewStageout", False)
+        self.userSandbox = arguments.get("userSandbox", None)
+        self.userFiles = arguments.get("userFiles", [])
+        self.owner_vogroup = arguments.get("VoGroup", '')
+        self.owner_vorole = arguments.get("VoRole", '')
+        self.asyncDest = arguments.get("asyncDest", None)
         self.enableHarvesting = arguments.get("EnableHarvesting", True)
         self.enableNewStageout = arguments.get("EnableNewStageout", False)
 
@@ -444,7 +462,7 @@ class StdBase(object):
             runLFN = "/".join(runSections)
 
 
-        if parentTask.name() in analysisTaskTypes:
+        if self.forceUserStorage or parentTask.name() in analysisTaskTypes:
 
             # dataTier for user data is always USER
             dataTier = "USER"
@@ -486,9 +504,9 @@ class StdBase(object):
             lfnBase(unmergedLFN)
             lfnBase(mergedLFN)
 
-        if forceMerged:
+        if forceMerged and not self.forceUserStorage:
             unmergedLFN = mergedLFN
-        elif forceUnmerged:
+        elif forceUnmerged or self.forceUserStorage:
             mergedLFN = unmergedLFN
 
         cmsswStep = parentTask.getStep(stepName)

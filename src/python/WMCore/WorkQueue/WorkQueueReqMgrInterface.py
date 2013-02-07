@@ -7,6 +7,7 @@ from WMCore.WorkQueue.WorkQueueExceptions import WorkQueueWMSpecError, WorkQueue
 from WMCore.Database.CMSCouch import CouchError
 from WMCore.Database.CouchUtils import CouchConnectionError
 from WMCore import Lexicon
+from httplib import HTTPException
 import os
 import time
 import socket
@@ -85,7 +86,7 @@ class WorkQueueReqMgrInterface():
                 self.logger.info("Marking request %s as failed in ReqMgr" % reqName)
                 self.reportRequestStatus(reqName, 'Failed', message = str(ex))
                 continue
-            except (IOError, socket.error, CouchError, CouchConnectionError), ex:
+            except (IOError, socket.error, CouchError, CouchConnectionError, HTTPException), ex:
                 # temporary problem - try again later
                 msg = 'Error processing request "%s": will try again later.' \
                 '\nError: "%s"' % (reqName, str(ex))

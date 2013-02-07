@@ -138,6 +138,7 @@ def freeSlots(multiplier = 1.0, minusRunning = False, allowedStates = ['Normal']
     rc_sites = ResourceControl().listThresholdsForCreate()
     sites = defaultdict(lambda: 0)
     for name, site in rc_sites.items():
+        logging.info("Looking at %s %s for work" % (name, site))
         if not site.get('cms_name'):
             logging.warning("Not fetching work for %s, cms_name not defined" % name)
             continue

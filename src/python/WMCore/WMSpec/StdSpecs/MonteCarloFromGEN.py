@@ -81,7 +81,8 @@ class MonteCarloFromGENWorkloadFactory(StdBase):
                                               configCacheUrl = self.configCacheUrl,
                                               configDoc = self.configCacheID, splitAlgo = self.procJobSplitAlgo,
                                               splitArgs = self.procJobSplitArgs, stepType = "CMSSW",
-                                              primarySubType = "Production")
+                                              primarySubType = "Production",
+                                              userSandbox = self.userSandbox, userFiles = self.userFiles)
         self.addLogCollectTask(procTask)
 
         procMergeTasks = {}

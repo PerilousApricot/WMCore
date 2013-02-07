@@ -8,7 +8,11 @@ test couchapps.  Its utility is probably limited for people who
 know what they're doing, and for couchapps that will never need
 to be altered
 """
+import logging
+#logging.basicConfig( level = logging.DEBUG )
 import os
+import os.path
+import json
 import unittest
 import threading
 
@@ -165,7 +169,7 @@ class CouchappTest(unittest.TestCase):
         return testJobGroup
 
 
-    def testHighestJobID(self):
+    def atestHighestJobID(self):
         """
         _highestJobID_
 
@@ -191,6 +195,30 @@ class CouchappTest(unittest.TestCase):
         self.assertEqual(jobID, 19)
 
         return
+
+    def testAsoPendingJob(self):
+        """
+        makes sure a job in asopending is properly visible
+        """
+        pendingJobDocument = json.load(open(os.path.join( \
+                                                        WMCore.WMBase.getTestBase(), 
+                                                        "WMCore_t",
+                                                        "JobStateMachine_t",
+                                                        "test_asopendingjsm.json"),'r'))
+
+        self.jobsdatabase.queue(pendingJobDocument)
+        self.jobsdatabase.commit()
+        
+        print json.dumps(self.jobsdatabase.document("13576"),indent=4)
+        jobStatus = self.jobsdatabase.loadView("JobDump", 
+                                                "jobStatusByWorkflowAndSite",
+                                                { 'reduce' : False })
+        
+        jobStatus2 = self.jobsdatabase.loadView("JobDump", "statusByWorkflowName",
+                            { 'reduce' : False})
+        print jobStatus
+        self.assertEqual( len(jobStatus['rows']), 1)
+        self.assertEqual( jobStatus['rows'][0]['key'][2], 'asopending' )
 
 
 if __name__ == '__main__':

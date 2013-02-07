@@ -12,6 +12,7 @@ import threading
 import time
 import urllib
 import types
+import pprint
 
 from WMQuality.TestInitCouchApp import TestInitCouchApp
 
@@ -45,9 +46,10 @@ class TestChangeState(unittest.TestCase):
         self.testInit = TestInitCouchApp(__file__)
         self.testInit.setLogging()
         self.testInit.setDatabaseConnection()
+        self.testInit.generateWorkDir()
         self.testInit.setupCouch("changestate_t/jobs", "JobDump")
         self.testInit.setupCouch("changestate_t/fwjrs", "FWJRDump")
-        self.testInit.setupCouch("job_summary", "WMStats")
+        self.testInit.setupCouch("job_summary_t", "WMStats")
 
         self.testInit.setSchema(customModules = ["WMCore.WMBS"],
                                 useDefault = False)
@@ -61,7 +63,7 @@ class TestChangeState(unittest.TestCase):
         self.config = Configuration()
         self.config.component_("JobStateMachine")
         self.config.JobStateMachine.couchurl = os.getenv("COUCHURL")
-        self.config.JobStateMachine.jobSummaryDBName = "job_summary"
+        self.config.JobStateMachine.jobSummaryDBName = "job_summary_t"
         return
 
     def tearDown(self):
@@ -74,7 +76,7 @@ class TestChangeState(unittest.TestCase):
         self.testInit.tearDownCouch()
         return
 
-    def testCheck(self):
+    def atestCheck(self):
         """
         This is the test class for function Check from module ChangeState
         """
@@ -92,7 +94,7 @@ class TestChangeState(unittest.TestCase):
                 self.assertRaises(AssertionError, change.check, dest, state)
         return
 
-    def testRecordInCouch(self):
+    def atestRecordInCouch(self):
         """
         _testRecordInCouch_
 
@@ -227,11 +229,12 @@ class TestChangeState(unittest.TestCase):
             self.assertEqual(couchJobDoc["_rev"], row["value"]["rev"],
                              "Error: Rev is wrong.")
         change.propagate([testJobA, testJobB], "complete", "executing")
-        change.propagate([testJobA, testJobB], "pendingaso", "complete")
-            
+        change.propagate([testJobA, testJobB], "asopending", "complete")
+        change.propagate([testJobA, testJobB], "complete", "asopending")
+           
         return
 
-    def testUpdateFailedDoc(self):
+    def atestUpdateFailedDoc(self):
         """
         _testUpdateFailedDoc_
 
@@ -277,7 +280,7 @@ class TestChangeState(unittest.TestCase):
         self.assertTrue(testJobADoc["states"].has_key("1"))
         return
 
-    def testPersist(self):
+    def atestPersist(self):
         """
         _testPersist_
 
@@ -346,7 +349,7 @@ class TestChangeState(unittest.TestCase):
 
         return
 
-    def testRetryCount(self):
+    def atestRetryCount(self):
         """
         _testRetryCount_
 
@@ -420,7 +423,7 @@ class TestChangeState(unittest.TestCase):
 
         return
 
-    def testJobSerialization(self):
+    def atestJobSerialization(self):
         """
         _testJobSerialization_
 
@@ -499,7 +502,7 @@ class TestChangeState(unittest.TestCase):
 
         return
 
-    def testDuplicateJobReports(self):
+    def atestDuplicateJobReports(self):
         """
         _testDuplicateJobReports_
 
@@ -563,7 +566,7 @@ class TestChangeState(unittest.TestCase):
         return
 
 
-    def testJobKilling(self):
+    def atestJobKilling(self):
         """
         _testJobKilling_
 
@@ -631,7 +634,7 @@ class TestChangeState(unittest.TestCase):
 
         return
 
-    def testFWJRInputFileTruncation(self):
+    def atestFWJRInputFileTruncation(self):
         """
         _testFWJRInputFileTruncation_
 
@@ -709,8 +712,121 @@ class TestChangeState(unittest.TestCase):
 
         return
 
+    def testFWJRSetAsyncOptions(self):
+        """
+        _testFWJRSetAsyncOptions_
 
-    def testJobSummary(self):
+        Test and see whether the ChangeState code can
+        be used to propagate whether or not a file needs to be transferred
+
+        Code stolen from the inputFileTruncation test
+            who stole from the serialization test
+        """
+
+        self.config.JobStateMachine.maxFWJRInputFiles = 0
+        change = ChangeState(self.config, "changestate_t")
+
+        locationAction = self.daoFactory(classname = "Locations.New")
+        locationAction.execute("site1", seName = "somese.cern.ch")
+
+        testWorkflow = Workflow(spec = "spec.xml", owner = "Steve",
+                                name = "wf001", task = "Test")
+        testWorkflow.create()
+        testFileset = Fileset(name = "TestFileset")
+        testFileset.create()
+
+        testFile = File(lfn = "SomeLFNC", locations = set(["somese.cern.ch"]))
+        testFile.create()
+        testFileset.addFile(testFile)
+        testFileset.commit()
+
+        testSubscription = Subscription(fileset = testFileset,
+                                        workflow = testWorkflow)
+        testSubscription.create()
+
+        splitter = SplitterFactory()
+        jobFactory = splitter(package = "WMCore.WMBS",
+                              subscription = testSubscription)
+        jobGroup = jobFactory(files_per_job = 1)[0]
+
+        self.assertEqual(len(jobGroup.jobs), 1,
+                         "Error: Splitting should have created one job.")
+
+        testJobA = jobGroup.jobs[0]
+        testJobA["user"] = "sfoulkes"
+        testJobA["group"] = "DMWM"
+        testJobA["taskType"] = "Processing"
+
+        change.propagate([testJobA], 'created', 'new')
+        myReport = Report()
+        reportPath = os.path.join(getTestBase(),
+                                  "WMCore_t/JobStateMachine_t/Report.pkl")
+        newPath = os.path.join( self.testInit.testDir, "newreport.pkl" )
+        myReport.unpersist(reportPath)
+        files = myReport.getAllFileRefsFromStep('cmsRun1')
+        recoSize = 5588698
+        alcaSize = 5588749
+        for onefile in files:
+            onefile.branches = ['emptyyyy branch']
+            if onefile.module_label == 'outputRECORECO' and onefile.size == recoSize:
+                onefile.async_dest = 'T9_US_Mordor'
+                onefile.preserve_lfn = True
+            elif onefile.module_label == 'outputALCARECOALCARECO' and onefile.size == alcaSize:
+                onefile.preserve_lfn = True
+                onefile.async_dest = None
+            else:
+                raise RuntimeError, "Unknown output module"
+        myReport.persist(newPath)
+        newReport = Report()
+        newReport.unpersist(newPath)
+        testJobA["fwjr"] = newReport
+
+        change.propagate([testJobA], 'executing', 'created')
+
+        changeStateDB = self.couchServer.connectDatabase(dbname = "changestate_t/fwjrs")
+        allDocs = changeStateDB.document("_all_docs")
+
+        self.assertEqual(len(allDocs["rows"]), 2,
+                         "Error: Wrong number of documents")
+
+        result = changeStateDB.loadView("FWJRDump", "fwjrsByWorkflowName")
+        self.assertEqual(len(result["rows"]), 1,
+                         "Error: Wrong number of rows.")
+        for row in result["rows"]:
+            couchJobDoc = changeStateDB.document(row["value"]["id"])
+            self.assertEqual(couchJobDoc["_rev"], row["value"]["rev"],
+                             "Error: Rev is wrong.")
+
+        for resultRow in allDocs["rows"]:
+            if resultRow["id"] != "_design/FWJRDump":
+                fwjrDoc = changeStateDB.document(resultRow["id"])
+                break
+        changeStateDB = self.couchServer.connectDatabase(dbname = "job_summary_t")
+        jobDumpJobsDB = self.couchServer.connectDatabase(dbname = "changestate_t/jobs")
+        allSummaryDocs = changeStateDB.document("_all_docs")
+        for resultRow in allSummaryDocs["rows"]:
+            if resultRow["id"].find("_design") != -1:
+                continue
+            doc = changeStateDB.document(resultRow['id'])
+            for onefile in doc['output']:
+                if onefile['size'] == alcaSize:
+                    self.assertFalse( 'asyncDest' in onefile )
+                    self.assertFalse( 'preserveLFN' in onefile )
+                elif onefile['size'] == recoSize:
+                    self.assertEqual( onefile['asyncDest'], 'T9_US_Mordor' )
+                    self.assertEqual( onefile['preserveLFN'], True )
+                else:
+                    self.fail('Found an unknown file, this test should be updated')
+        result = jobDumpJobsDB.loadView("JobDump", "jobStatusByWorkflowAndSite")
+        pprint.pprint(jobDumpJobsDB.document("_all_docs"))
+        pprint.pprint(result)
+        self.assertEqual(fwjrDoc["fwjr"]["steps"]['cmsRun1']['input']['source'], [])
+
+        return
+
+
+
+    def atestJobSummary(self):
         """
         _testJobSummary_
 
@@ -760,7 +876,7 @@ class TestChangeState(unittest.TestCase):
         testJobA["fwjr"] = myReport
         change.propagate([testJobA], 'jobfailed', 'executing')
 
-        changeStateDB = self.couchServer.connectDatabase(dbname = "job_summary")
+        changeStateDB = self.couchServer.connectDatabase(dbname = "job_summary_t")
         allDocs = changeStateDB.document("_all_docs")
 
         self.assertEqual(len(allDocs["rows"]), 2,
@@ -781,7 +897,7 @@ class TestChangeState(unittest.TestCase):
         return
 
 
-    def testIndexConflict(self):
+    def atestIndexConflict(self):
         """
         _testIndexConflict_
 

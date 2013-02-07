@@ -443,6 +443,7 @@ class JobSubmitterPoller(BaseWorkerThread):
         self.sortedSites = sorted(rcThresholds.keys(),
                                   key = lambda x : rcThresholds[x]["total_pending_slots"],
                                   reverse = True)
+        #logging.info("looking at %s %s" % (self.sortedSites, rcThresholds))
         self.sortedSites = sorted(self.sortedSites, key = lambda x : rcThresholds[x]["cms_name"][0:2])
         logging.debug('Will fill in the following order: %s' % str(self.sortedSites))
 

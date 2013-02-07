@@ -668,7 +668,6 @@ class Report:
         """
 
         outputMod = self.getOutputModule(step = step, outputModule = outputModule)
-
         if not outputMod:
             return None
 
@@ -706,6 +705,9 @@ class Report:
         newFile['configURL']      = getattr(fileRef, 'configURL', None)
         newFile['inputPath']      = getattr(fileRef, 'inputPath', None)
         newFile['custodialSite']  = getattr(fileRef, 'custodialSite', None)
+        newFile['asyncDest']      = getattr(fileRef, 'async_dest', None)
+        newFile['preserveLFN']    = getattr(fileRef, 'preserve_lfn', None)
+        newFile['asyncStatus']    = getattr(fileRef, 'asyncStatus', None)
         newFile["outputModule"]   = outputModule
 
 
@@ -727,8 +729,9 @@ class Report:
         listOfModules = getattr(stepReport, 'outputModules', None)
 
         if not listOfModules:
-            logging.error("Asked to retrieve files from step %s with no outputModules" % step)
-            logging.debug("StepReport: %s" % stepReport)
+            # can be spammy, many steps dont have output modules
+            #logging.error("Asked to retrieve files from step %s with no outputModules" % step)
+            #logging.debug("StepReport: %s" % stepReport)
             return []
 
         listOfFiles = []

@@ -142,7 +142,6 @@ class StdBase(object):
         self.dqmSequences = arguments.get("DqmSequences", [])
         self.dqmConfigCacheID = arguments.get("DQMConfigCacheID", None)
         self.procScenario = arguments.get("ProcScenario", None)
-<<<<<<< HEAD
         self.userSandbox = arguments.get("userSandbox", None)
         self.userFiles = arguments.get("userFiles", [])
         self.owner_vogroup = arguments.get("VoGroup", '')

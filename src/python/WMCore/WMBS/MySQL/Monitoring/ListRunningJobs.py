@@ -9,6 +9,7 @@ all jobs that are in the following states:
   created
   submitted
   executing
+  asopending
 """
 
 
@@ -27,6 +28,7 @@ class ListRunningJobs(DBFormatter):
                    wmbs_job_state.name = 'new' OR
                    wmbs_job_state.name = 'created' OR
                    wmbs_job_state.name = 'submitted' OR
+                   wmbs_job_state.name = 'asopending' OR
                    wmbs_job_state.name = 'executing'"""
 
     def execute(self, conn = None, transaction = False):

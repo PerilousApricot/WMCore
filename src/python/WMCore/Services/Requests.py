@@ -137,12 +137,15 @@ class Requests(dict):
         """
         Wrapper around request helper functions.
         """
+        #print "Making request to %s -> %s with data %s" % (self['host'],uri,data)
+        #logging.debug("Making request to %s with data %s" % (uri,data))
         if  self.pycurl:
             result = self.makeRequest_pycurl(uri, data, verb, incoming_headers,
                          encoder, decoder, contentType)
         else:
             result = self.makeRequest_httplib(uri, data, verb, incoming_headers,
                          encoder, decoder, contentType)
+        #print "Got response back %s" % [result]
         return result
 
     def makeRequest_pycurl(self, uri=None, params={}, verb='GET',
@@ -437,7 +440,7 @@ class Requests(dict):
             if not os.path.exists(cert) or not os.path.exists(key):
                 raise WMException('Request requires a host certificate and key',
                                   "WMCORE-11")
-
+        logging.info("Using key and cert for request: %s %s" % (key,cert))
         # All looks OK, still doesn't guarantee proxy's validity etc.
         return key, cert
 

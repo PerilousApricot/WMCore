@@ -82,7 +82,7 @@ class WMException(exceptions.Exception):
 
         # Determine the traceback at time of __init__
         try:
-            self.traceback = "\n".join(traceback.format_tb(sys.exc_info()[2]))
+            self.traceback = traceback.format_exc()
         except:
             self.traceback = "WMException error: Couldn't get traceback\n"
 

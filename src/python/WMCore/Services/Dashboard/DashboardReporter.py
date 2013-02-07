@@ -250,8 +250,9 @@ class DashboardReporter(WMObject):
                     if not procDataset:
                         procDataset = outFile['dataset'].get('processedDataset', None)
                     if not (dataTier and procDataset):
-                        logging.error('Output module %s has a file %s with incomplete info'
-                                        % (outputMod, outFile['lfn']))
+                        # spammy more often than not
+                        #logging.error('Output module %s has a file %s with incomplete info'
+                                        #% (outputMod, outFile['lfn']))
                         continue
                     events += outFile['events']
                 if dataTier and procDataset:

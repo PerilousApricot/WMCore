@@ -46,6 +46,7 @@ class ReqMgrRESTModel(RESTModel):
     be found at https://twiki.cern.ch/twiki/bin/viewauth/CMS/ReqMgrSystemDesign """
     def __init__(self, config):
         RESTModel.__init__(self, config)
+        print config
         self.couchUrl = config.couchUrl
         self.workloadDBName = config.workloadDBName
         self.configDBName = config.configDBName
@@ -449,21 +450,26 @@ class ReqMgrRESTModel(RESTModel):
                 self.info("Creating a request for: '%s'\n\tworkloadDB: '%s'\n\twmstatUrl: "
                              "'%s' ..." % (reqInputArgs, self.workloadDBName,
                                            Utilities.removePasswordFromUrl(self.wmstatWriteURL)))
+                print "reqinfo %s %s %s" % (self.couchUrl, self.workloadDBName, self.wmstatWriteURL)
                 request = Utilities.makeRequest(self, reqInputArgs, self.couchUrl,
                                                 self.workloadDBName, self.wmstatWriteURL)
             except cherrypy.HTTPError as ex:
-                self.error("Create request failed, reason: %s" % ex)
+                print ex
+                self.error("Create request failed (HTTP), reason: %s" % ex)
                 # Assume that this is a valid HTTPError
                 raise
             except (WMException, Exception) as ex:
                 # TODO problem not to expose logs to the client
                 # e.g. on ConfigCacheID not found, the entire CouchDB traceback is sent in ex_message
-                self.error("Create request failed, reason: %s" % ex)
+                print ex
+                import traceback
+                self.error("Create request failed (3), reason: %s" % ex)
+                self.error("Exception: %s" % traceback.format_exc())
                 if hasattr(ex, "name"):
                     detail = ex.name
                 else:
                     detail = "check logs." 
-                msg = "Create request failed, %s" % detail
+                msg = "Create request failed (2), %s" % detail
                 raise cherrypy.HTTPError(400, msg)
             self.info("Request '%s' created." % request['RequestName'])
         # see if status & priority need to be upgraded

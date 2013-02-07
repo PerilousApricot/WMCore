@@ -3,6 +3,9 @@ function(doc) {
   function statusMap(){
       var status;
       switch (doc['states'][lastStateIndex].newstate) {
+          case 'asopending':
+                status = 'transferring';
+                break;
           case 'created':
               if (doc['states'][lastStateIndex].oldstate == 'new') {
                   status = 'queued_first';
@@ -18,6 +21,9 @@ function(doc) {
                   throw "not valid transition";
               };
               break;
+          case 'asocooloff':
+              status = 'cooloff_aso';
+              break;
           case 'createcooloff':
               status = 'cooloff_create';
               break;
@@ -26,6 +32,9 @@ function(doc) {
               break;
           case 'jobcooloff':
               status = 'cooloff_job';
+              break;
+          case 'asopaused':
+              status = 'paused_aso';
               break;
           case 'createpaused':
               status = 'paused_create';
@@ -46,6 +55,10 @@ function(doc) {
               } else if (doc['states'][lastStateIndex - 1].oldstate == 'jobpaused')  {
                   status = 'submitted_retry';
               } else if (doc['states'][lastStateIndex - 1].oldstate == 'jobcooloff') {
+                  status = 'submitted_retry';
+              } else if (doc['states'][lastStateIndex - 1].oldstate == 'asopaused')  {
+                  status = 'submitted_retry';
+              } else if (doc['states'][lastStateIndex - 1].oldstate == 'asocooloff') {
                   status = 'submitted_retry';
               } else {
                   throw "not valid transition";
@@ -82,6 +95,8 @@ function(doc) {
                       status = 'failure_submit';
                   } else if (doc['states'][lastStateIndex - 1].oldstate == 'createfailed') {
                       status = 'failure_create';
+                  } else if (doc['states'][lastStateIndex - 1].oldstate == 'asofailed') {
+                      status = 'failure_aso';
                   } else {
                       throw "not valid transition";
                   };
@@ -106,8 +121,13 @@ function(doc) {
       
       //TODO need to get the last number by comparing the i. 11 might come first then 2
       // Is it depend on the interpreter? Otherwise this can be outside the loop
+      sortStates = function(a,b) {
+        var aN = parseInt(a);
+        var bN = parseInt(b);
+        return aN - bN
+    }
       for (var lastStateIndex in doc['states']) {
-          tmpSite = doc['states'][lastStateIndex ].location
+          tmpSite = doc['states'][lastStateIndex].location
           if (tmpSite !== "Agent") {
               siteLocation  = tmpSite
           };
@@ -116,8 +136,8 @@ function(doc) {
           // tmpSite should be 'Agent'
           siteLocation = tmpSite;
       };
-      
-      emit([doc['workflow'], doc['task'], statusMap(), siteLocation], 1)
+      //lastStateIndex = doc['states'].length - 1
+      emit([doc['workflow'], doc['task'], statusMap(), siteLocation], 1);//doc['states'][lastStateIndex]);
   };
 }
 

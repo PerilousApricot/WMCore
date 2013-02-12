@@ -262,7 +262,6 @@ class ChangeState(WMObject, WMConnectionBase):
                 self.jsumdatabase.makeRequest(uri = updateUri, type = "PUT", decode = False)
                 logging.debug("Updated job summary state history for job %s" % jobSummaryId)
             
-            logging.info("examining FWJR %s" % job.get("fwjr", None))
             if job.get("fwjr", None):
 
                 # If there are too many input files, strip them out
@@ -371,7 +370,7 @@ class ChangeState(WMObject, WMConnectionBase):
                                      transaction = self.existingTransaction())
 
         self.jobsdatabase.commit(callback = discardConflictingDocument)
-        logging.info("committing fwjrdocs %s" %self.fwjrdatabase.commit(callback = discardConflictingDocument))
+        self.fwjrdatabase.commit(callback = discardConflictingDocument)
         self.jsumdatabase.commit()
         return
 

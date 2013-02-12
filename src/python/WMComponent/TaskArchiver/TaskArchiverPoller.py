@@ -362,11 +362,12 @@ class TaskArchiverPoller(BaseWorkerThread):
                 continue
             except Exception, ex:
                 #Something didn't go well on couch, abort!!!
-                msg = "Couldn't upload summary for workflow %s, will try again next time\n" % workflow[0]
+                msg = "Couldn't upload summary for workflow %s, will try again next time\n" % workflow
                 msg += "Nothing will be deleted until the summary is in couch\n"
                 msg += "Exception message: %s" % str(ex)
                 print traceback.format_exc()
                 logging.error(msg)
+                logging.error(traceback.format_exc())
                 self.sendAlert(3, msg = msg)
                 continue
 

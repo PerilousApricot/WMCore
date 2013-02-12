@@ -31,7 +31,6 @@ def discardConflictingDocument(couchDbInstance, data, result):
     """
 
     conflictingId = result["id"]
-    logging.error("discarding conflict for %s" % conflictingId)
     try:
         if not couchDbInstance.documentExists(conflictingId):
             # It doesn't exist, this is odd
@@ -56,7 +55,7 @@ def discardConflictingDocument(couchDbInstance, data, result):
             if doc['_id'] == conflictingId:
                 logging.info(pprint.pformat(doc.get('_rev', None)))
         logging.info('done with docs')
-        logging.info(pprint.pformat(couchDbInstance.document(conflictingId)['_rev']))
+        couchDbInstance.document(conflictingId)['_rev']
         logging.info(retval)
         return retval
     except CouchError, ex:
@@ -282,8 +281,7 @@ class ChangeState(WMObject, WMConnectionBase):
                                 "retrycount": job["retry_count"],
                                 "fwjr": job["fwjr"].__to_json__(None),
                                 "type": "fwjr"}
-                logging.info('queueing up %s' % fwjrDocument)
-                logging.info("Queueing fwjr docs %s " %self.fwjrdatabase.queue(fwjrDocument, timestamp = True, callback = discardConflictingDocument))
+                self.fwjrdatabase.queue(fwjrDocument, timestamp = True, callback = discardConflictingDocument)
 
                 jobSummaryId = job["name"]
                 # building a summary of fwjr

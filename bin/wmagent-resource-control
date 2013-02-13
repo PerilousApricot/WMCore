@@ -59,6 +59,11 @@ def createOptionParser():
     myOptParser.add_option("--add-all-sites", dest = "addAllSites", default = False,
                            action = "store_true",
                            help = "Add all of the CMS sites to resource control.")
+    myOptParser.add_option("--add-good-T3s", dest = "addGoodT3s", 
+                           default = False,
+                           action = "store_true",
+                           help = "Add subset of CMS T3s to resource control")
+
     myOptParser.add_option("--site-name", dest = "siteName",
                            help = "Specify the unique name of the location")
     myOptParser.add_option("--pending-slots", dest = "pendingSlots",
@@ -299,6 +304,22 @@ else:
         allSites = getCMSSiteInfo("*")
         addSites(myResourceControl, allSites, options.ceName, options.plugin,
                  options.pendingSlots, options.runningSlots)
+    elif options.addGoodT3s == True:
+        good = ['T3_BY_NCPHEP',
+                'T3_FR_IPNL',
+                'T3_IT_Bologna',
+                'T3_UK_SGrid_Oxford',
+                'T3_US_Colorado',
+                'T3_US_Cornell',
+                'T3_US_NotreDame',
+                'T3_US_Omaha',
+                'T3_US_UCR',
+                'T3_US_UMD',
+                'T3_US_UMiss',
+                'T3_US_Brown']
+        for site in good:
+            oneSite = getCMSSiteInfo(site)
+            addSites(myResourceControl, oneSite, options.ceName, options.plugin, options.pendingSlots, options.runningSlots)
     elif options.siteName is None:
         print "You must specify a site name."
         myOptParser.print_help()

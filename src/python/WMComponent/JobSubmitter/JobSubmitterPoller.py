@@ -465,7 +465,6 @@ class JobSubmitterPoller(BaseWorkerThread):
         """
         jobsToSubmit = {}
         jobsToPrune = {}
-        workflowsToPrune = set()
 
         rcThresholds = self.getThresholds()
 
@@ -568,7 +567,6 @@ class JobSubmitterPoller(BaseWorkerThread):
                         # Remove the entry in the cache for the workflow if it is empty.
                         if len(self.cachedJobs[siteName][taskType][workflow]) == 0:
                             del self.cachedJobs[siteName][taskType][workflow]
-                            workflowsToPrune.add(workflow)
                         if self.jobDataCache.has_key(workflow) and len(self.jobDataCache[workflow].keys()) == 0:
                             del self.jobDataCache[workflow]
 
@@ -634,15 +632,18 @@ class JobSubmitterPoller(BaseWorkerThread):
                         break
 
         # Remove the jobs that we're going to submit from the cache.
+        allWorkflows = set()
         for siteName in self.cachedJobs.keys():
             for taskType in self.cachedJobs[siteName].keys():
                 for workflow in self.cachedJobs[siteName][taskType].keys():
+                    allWorkflows.add(workflow)
                     if workflow in jobsToPrune.keys():
                         self.cachedJobs[siteName][taskType][workflow] -= jobsToPrune[workflow]
 
         # Remove workflows from the timestamp dictionary which are not anymore in the cache
-        for workflow in workflowsToPrune:
-            if workflow in self.workflowTimestamps:
+        workflowsWithTimestamp = self.workflowTimestamps.keys()
+        for workflow in workflowsWithTimestamp:
+            if workflow not in allWorkflows:
                 del self.workflowTimestamps[workflow]
 
         logging.info("Have %s packages to submit." % len(jobsToSubmit))

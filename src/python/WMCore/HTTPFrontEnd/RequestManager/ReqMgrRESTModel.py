@@ -4,7 +4,7 @@
 ReqMgrRESTModel
 
 This holds the methods for the REST model, all methods which
-will be available via HTTP PUT/GET/POST commands from the iconterface,
+will be available via HTTP PUT/GET/POST commands from the interface,
 the validation, the security for each, and the function calls for the
 DB interfaces they execute.
 
@@ -263,7 +263,11 @@ class ReqMgrRESTModel(RESTModel):
         """ If a request name is specified, return the details of the request.
         Otherwise, return an overview of all requests """
         if requestName == None:
-            return GetRequest.getRequests()
+            result = GetRequest.getRequests()
+            # is not returning e.g. Campaign which
+            # Utilities.requestDetails(requestName) does since it queries values
+            # from helper (spec) (getRequestNames does but is wrong) 
+            return result
         else:
             result = Utilities.requestDetails(requestName)
             try:
@@ -275,9 +279,12 @@ class ReqMgrRESTModel(RESTModel):
             return result
 
     def getRequestNames(self):
+        # 2013-02-13 is wrong anyway (e.g. Campaign is not working)
+        # should be removed
         """ return all the request names in RequestManager as list """
         #TODO this could me combined with getRequest
         return GetRequest.getOverview()
+                
 
     def getOutputForRequest(self, requestName):
         """Return the datasets produced by this request."""
@@ -433,7 +440,7 @@ class ReqMgrRESTModel(RESTModel):
         return index
 
 
-    # had now permission control before, security issue fix
+    # had no permission control before, security issue fix
     @cherrypy.tools.secmodv2(role=Utilities.security_roles(), group = Utilities.security_groups())
     def putRequest(self, requestName=None, status=None, priority=None):
         request = None
@@ -493,9 +500,12 @@ class ReqMgrRESTModel(RESTModel):
         """
         Input assumes an existing request, checks that.
         The original existing request is not touched.
-        A new request is generated (and is in the 'new' state), it has
-        newly generate RequestName, new timestamp, RequestDate, however
-        -everything- else is copied from the original request.
+        A new request is generated.
+        The cloned request has a newly generated RequestName, new timestamp,
+        RequestDate, however -everything- else is copied from the original request.
+        Addition: since Edgar changed his mind, he no longer
+        wants this cloned request be in the 'new' state but put 
+        straight into 'assignment-approved' state.
         
         """
         request = None
@@ -512,11 +522,18 @@ class ReqMgrRESTModel(RESTModel):
                 toRemove = ("RequestName", "RequestDate", "timeStamp", "ReqMgrRequestID",
                             "RequestWorkflow")
                 for remove in toRemove:
-                    del requestOrigDict[remove]                
+                    del requestOrigDict[remove]
                 newReqSchema.update(requestOrigDict) # clone
+                
+                # problem that priority wasn't preserved went down from here:
+                # via CheckIn.checkIn() -> MakeRequest.createRequest() -> Request.New.py factory
                 request = Utilities.buildWorkloadAndCheckIn(self, newReqSchema,
                                                             self.couchUrl, self.workloadDBName,
                                                             self.wmstatWriteURL, clone=True)
+                # change the clone request state as desired
+                Utilities.changeStatus(newReqSchema["RequestName"],
+                                       "assignment-approved",
+                                        self.wmstatWriteURL)
                 return request
             else:
                 msg = "Request '%s' not found." % requestName
@@ -621,6 +638,8 @@ class ReqMgrRESTModel(RESTModel):
         """ Change the group's priority """
         return GroupManagement.setPriority(group, priority)
 
+    # had no permission control before, security issue fix
+    @cherrypy.tools.secmodv2(role=Utilities.security_roles(), group = Utilities.security_groups())
     def deleteRequest(self, requestName):
         """ Deletes a request from the ReqMgr """
         request = self.findRequest(requestName)

@@ -477,6 +477,12 @@ class WMTaskHelper(TreeHelper):
         splittingParams = datadict.dictionary_()
         splittingParams["siteWhitelist"] = self.siteWhitelist()
         splittingParams["siteBlacklist"] = self.siteBlacklist()
+
+        if "runWhitelist" not in splittingParams.keys() and self.inputRunWhitelist() != None:
+            splittingParams["runWhitelist"] = self.inputRunWhitelist()
+        if "runBlacklist" not in splittingParams.keys() and self.inputRunBlacklist() != None:
+            splittingParams["runBlacklist"] = self.inputRunBlacklist()
+            
         return splittingParams
 
     def addGenerator(self, generatorName, **settings):
@@ -1144,7 +1150,7 @@ class WMTaskHelper(TreeHelper):
         Set the task processing version
         """
 
-        self.data.parameters.processingVersion = procVer
+        self.data.parameters.processingVersion = int(procVer)
         return
 
     def getProcessingVersion(self):
@@ -1153,7 +1159,25 @@ class WMTaskHelper(TreeHelper):
 
         Get the task processing version
         """
-        return getattr(self.data.parameters, 'processingVersion', None)
+        return getattr(self.data.parameters, 'processingVersion', 0)
+
+    def setProcessingString(self, procString):
+        """
+        _setProcessingString_
+
+        Set the task processing string
+        """
+
+        self.data.parameters.processingString = procString
+        return
+
+    def getProcessingString(self):
+        """
+        _getProcessingString_
+
+        Get the task processing string
+        """
+        return getattr(self.data.parameters, 'processingString', None)
 
     def setAcquisitionEra(self, era):
         """

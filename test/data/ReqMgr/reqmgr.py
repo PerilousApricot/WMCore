@@ -51,17 +51,31 @@ class ReqMgrClient(object):
                
 
     """
-    def __init__(self, reqMgrUrl, certFile, keyFile):
-        logging.info("Identity files:\n\tcert file: '%s'\n\tkey file:  '%s' " %
-                     (certFile, keyFile))
+    def __init__(self, reqMgrUrl, config):
         self.textHeaders  =  {"Content-type": "application/x-www-form-urlencoded",
-                              "Accept": "text/plain"}
+                              "Accept": "text/plain"}        
+        logging.info("ReqMgr url: %s" % reqMgrUrl)
         if reqMgrUrl.startswith("https://"):
+            logging.info("Using HTTPS protocol, getting user identity files ...")
+            proxyFile = "/tmp/x509up_u%s" % os.getuid()
+            if not os.path.exists(proxyFile):
+                proxyFile = "UNDEFINED" 
+            certFile = config.cert or os.getenv("X509_USER_CERT",
+                                                os.getenv("X509_USER_PROXY", proxyFile)) 
+            keyFile = config.key or os.getenv("X509_USER_KEY",
+                                              os.getenv("X509_USER_PROXY", proxyFile)) 
+            logging.info("Identity files:\n\tcert file: '%s'\n\tkey file:  '%s' " %
+                         (certFile, keyFile))
             reqMgrUrl = reqMgrUrl.replace("https://", '')
-        self.conn = httplib.HTTPSConnection(reqMgrUrl, key_file = keyFile,
-                                            cert_file = certFile)
-        
-        
+            logging.info("Creating connection HTTPS ...")
+            self.conn = httplib.HTTPSConnection(reqMgrUrl, key_file = keyFile,
+                                                cert_file = certFile)
+        if reqMgrUrl.startswith("http://"):
+            logging.info("Using HTTP protocol, creating HTTP connection ...")
+            reqMgrUrl = reqMgrUrl.replace("http://", '')
+            self.conn = httplib.HTTPConnection(reqMgrUrl)
+
+                    
     def _httpRequest(self, verb, uri, data=None, headers=None):
         logging.info("Request: %s %s ..." % (verb, uri))
         if headers:
@@ -164,7 +178,8 @@ class ReqMgrClient(object):
             have to be hacked here, as if they were ticked on a web form.
             This hack is the reason why the requestArgs have to get
             to this method deep-copied if subsequent request assignment happens.
-            
+        This must pass the arguments JSON encoded since some of them can be complex types
+        such as JSON objects/python dictionaries.
         """
         def doAssignRequest(assignArgs, requestName):
             assignArgs["action"] = "Assign"        
@@ -174,7 +189,10 @@ class ReqMgrClient(object):
             # have to remove this one, otherwise it will get confused with "Team+team"
             # TODO this needs to be put right with proper REST interface
             del assignArgs["Team"]
-            encodedParams = urllib.urlencode(assignArgs, True)
+            jsonEncodedParams = {}
+            for paramKey in assignArgs.keys():
+                jsonEncodedParams[paramKey] = json.dumps(assignArgs[paramKey])
+            encodedParams = urllib.urlencode(jsonEncodedParams, True)
             logging.info("Assigning request '%s' ..." % requestName)
             status, data = self._httpRequest("POST", "/reqmgr/assign/handleAssignmentPage",
                                              data=encodedParams, headers=self.textHeaders)
@@ -214,9 +232,24 @@ class ReqMgrClient(object):
         logging.info(data)
             
             
-    def queryRequests(self, config):
-        if config.requestNames:
-            for requestName in config.requestNames:
+    def queryRequests(self, config, toQuery=None):
+        """
+        If toQuery and config.requestNames are not specified, then
+        all requests in the system are queried.
+        toQuery - particular request name to query.
+        config.requestNames - list of requests to query.
+        
+        Returns a list of requests in either case..
+        
+        """  
+        if toQuery:
+            requestsToQuery = [toQuery]
+        else:
+            requestsToQuery = config.requestNames
+            
+        requestsData = []
+        if requestsToQuery:
+            for requestName in requestsToQuery:
                 logging.info("Querying '%s' request ..." % requestName)
                 status, data = self._httpRequest("GET", "/reqmgr/reqMgr/request/%s" % requestName)
                 if status != 200:
@@ -225,16 +258,22 @@ class ReqMgrClient(object):
                 request = json.loads(data)
                 for k, v in sorted(request.items()):
                     print "\t%s: %s" % (k, v)
-                return request
+                requestsData.append(request)
+            # returns data on requests in the same order as in the config.requestNames
+            return requestsData
         else:
             logging.info("Querying all requests ...")
-            status, data = self._httpRequest("GET", "/reqmgr/reqMgr/requestnames")
+            status, data = self._httpRequest("GET", "/reqmgr/reqMgr/request")
             if status != 200:
                 print data
                 sys.exit(1)
             requests = json.loads(data)
+            keys = ("RequestName", "AcquisitionEra", "RequestType", "Requestor",
+                    "RequestType", "RequestStatus")
             for request in requests:
-                print request
+                type = request["type"]
+                r = request[type]
+                print " ".join(["%s: '%s'" % (k, r[k]) for k in keys])
             logging.info("%s requests in the system." % len(requests))
             return requests
             
@@ -275,6 +314,8 @@ class ReqMgrClient(object):
         
         """
         logging.info("Changing request priority: %s for %s ..." % (priority, requestName))
+        # this approach should also be possible:
+        # jsonSender.put("request/%s?priority=%s" % (requestName, priority))
         # "requestName": requestName can probably be specified here as well
         params = {"priority": "%s" % priority}
         encodedParams = urllib.urlencode(params)
@@ -284,6 +325,52 @@ class ReqMgrClient(object):
             logging.error("Error occurred, exit.")
             print data
             sys.exit(1)
+            
+            
+    def testResubmission(self, config):
+        """
+        The resubmission requests are taking as input name of an already
+        existing request, that is OriginalRequestName.
+        And another necessary argument is InitialTaskPath.
+        Example for a original MonteCarlo request Resubmission values:
+            OriginalRequestName:
+                maxa_RequestString-OVERRIDE-ME_130213_115608_2550
+            InitialTaskPath:
+                /maxa_RequestString-OVERRIDE-ME_130213_115608_2550/Production/ProductionMergeRAWSIMoutput
+                
+        1) create MonteCarlo request and save name
+        2) create Resubmission request using the name from 1)
+        3) compare Campaign fields, shall be the same
+        
+        Modifies config.requestNames
+        """
+        originalRequest = self.createRequest(config, restApi = True)
+        config.requestNames.append(originalRequest)
+        config.requestArgs["createRequest"]["RequestType"]
+        origMCRequestArgs = config.requestArgs["createRequest"]
+        resubmissionArgs = {"createRequest":
+                                {"OriginalRequestName": originalRequest,
+                                 "InitialTaskPath": "/" + originalRequest + "/Production/ProductionMergeRAWSIMoutput",
+                                 "RequestType": "Resubmission",
+                                 "TimePerEvent": origMCRequestArgs["TimePerEvent"],
+                                 "Memory": origMCRequestArgs["Memory"],
+                                 "SizePerEvent": origMCRequestArgs["SizePerEvent"],
+                                 "ACDCServer": "",
+                                 "ACDCDatabase": "",
+                                 "Requestor": origMCRequestArgs["Requestor"],
+                                 "Group": origMCRequestArgs["Group"]
+                                }
+                           }  
+        # have to call the underlying method directly to sneak the
+        # Resubmission request arguments directly
+        resubmissionRequest = self._createRequestViaRest(resubmissionArgs)
+        # returns a list
+        origReqData = self.queryRequests(config, toQuery=resubmissionRequest)
+        origReqData = origReqData[0]
+        msg = "Campaign in the Resubmission request not matching the original request."
+        assert config.requestArgs["createRequest"]["Campaign"] == origReqData["Campaign"]
+        config.requestNames.append(resubmissionRequest)
+        logging.info("Resubmission tests finished.")
         
     
     def allTests(self, config):
@@ -295,29 +382,55 @@ class ReqMgrClient(object):
         """
         self.userGroup(None) # argument has no meaning
         self.team(None) # argument has no meaning
+        
         currentRequests = self.queryRequests(config)
-        requestNames = []
-        config.assignRequests = True # createRequest will subsequently also assignRequests
-        requestNames.append(self.createRequest(config, restApi = True))
-        requestNames.append(self.createRequest(config, restApi = False))
-        config.requestNames = requestNames        
-        self.queryRequests(config)
-        config.cloneRequest = requestNames[0] # clone the first request in the list
-        requestNames.append(self.cloneRequest(config))
-        config.requestNames = requestNames
+        # save the first created request name (testRequestName) for some later tests
+        testRequestName = self.createRequest(config, restApi = True)
+        config.requestNames = []
+        config.requestNames.append(testRequestName)
+        # normally assignRequests() is called when config.assignRequests = True
+        # flag is set, here it's called explicitly
+        self.assignRequests(config)
+        # TODO - hack
+        # TaskChain request type doesn't have web GUI, can't then test
+        # web GUI call for that.
+        if config.requestArgs["createRequest"]["RequestType"] != "TaskChain":
+            config.requestNames.append(self.createRequest(config, restApi = False))
+            self.assignRequests(config)
+    
         # test priority changing (final priority will be sum of the current
         # and new, so have to first find out the current)
         # config.requestNames must be set
-        request = self.queryRequests(config)
-        currPriority = request["RequestPriority"]
+        testRequestData = self.queryRequests(config, toQuery=testRequestName)[0]
+        currPriority = testRequestData["RequestPriority"]
         newPriority = 10
         totalPriority = currPriority + newPriority
-        self.changePriority(requestNames[0], newPriority)
-        request = self.queryRequests(config)
-        assert request["RequestPriority"] == totalPriority, "New RequestPriority does not match!"
+        self.changePriority(testRequestName, newPriority)
+        testRequestData = self.queryRequests(config, toQuery=testRequestName)[0]
+        # test state (should be "assigned"
+        msg = "Status should be 'assigned', is '%s'" % testRequestData["RequestStatus"]
+        assert testRequestData["RequestStatus"] == "assigned", msg
+        assert testRequestData["RequestPriority"] == totalPriority, "New RequestPriority does not match!"
         
-        self.deleteRequests(config)
-        logging.info("%s requests in the system before this test." % len(currentRequests))
+        # test clone
+        config.cloneRequest = testRequestName
+        clonedRequestName = self.cloneRequest(config)
+        config.requestNames.append(clonedRequestName)
+        # now test that the cloned request has correct priority
+        clonedRequest = self.queryRequests(config, toQuery=clonedRequestName)[0]
+        msg = ("Priorities don't match: original request: %s cloned request: %s" %
+               (totalPriority, clonedRequest["RequestPriority"]))
+        assert totalPriority == clonedRequest["RequestPriority"], msg
+        
+        # test Resubmission request, only if we have MonteCarlo request template in input
+        if config.requestArgs["createRequest"]["RequestType"] == "MonteCarlo":
+            logging.info("MonteCarlo request in input detected, running Resubmission test ...")
+            # shall update config.requestNames for final cleanup 
+            self.testResubmission(config)        
+        
+        # final touches, checks and clean-up
+        self.deleteRequests(config) # takes config.requestNames 
+        logging.info("%s requests in the system before this test." % len(currentRequests))        
         config.requestNames = None # this means queryRequests will check all requests
         afterRequests = self.queryRequests(config)
         logging.info("%s requests in the system before this test." % len(afterRequests))
@@ -507,13 +620,7 @@ def initialization(commandLineArgs):
     config, actions = processCmdLine(commandLineArgs)
     logging.basicConfig(level=logging.DEBUG if config.verbose else logging.INFO)
     logging.debug("Set verbose console output.")
-    logging.info("Getting user identity files ...")
-    proxyFile = "/tmp/x509up_u%s" % os.getuid()
-    if not os.path.exists(proxyFile):
-        proxyFile = "UNDEFINED" 
-    certFile = config.cert or os.getenv("X509_USER_CERT", os.getenv("X509_USER_PROXY", proxyFile)) 
-    keyFile = config.key or os.getenv("X509_USER_KEY", os.getenv("X509_USER_PROXY", proxyFile)) 
-    reqMgrClient = ReqMgrClient(config.reqMgrUrl, certFile, keyFile)
+    reqMgrClient = ReqMgrClient(config.reqMgrUrl, config)
     if config.createRequest or config.assignRequests or config.allTests:
         # process request arguments and store them
         config.requestArgs = processRequestArgs(config.configFile, config.json)

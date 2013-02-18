@@ -11,7 +11,7 @@ from WMCore.WMSpec.WMStep import makeWMStep
 from WMCore.WMSpec.Steps.StepFactory import getStepTypeHelper
 
 from WMCore.Cache.WMConfigCache import ConfigCache, ConfigCacheException
-from WMCore.Lexicon import lfnBase, identifier
+from WMCore.Lexicon import lfnBase, identifier, procversion, procstring
 from WMCore.WMException import WMException
 from WMCore.Database.CMSCouch import CouchNotFoundError
 from WMCore.Services.Dashboard.DashboardReporter import DashboardReporter
@@ -293,6 +293,7 @@ class StdBase(object):
         workload.setEndPolicy("SingleShot")
         workload.setAcquisitionEra(acquisitionEras = self.acquisitionEra)
         workload.setProcessingVersion(processingVersions = self.processingVersion)
+        workload.setProcessingString(processingStrings = self.processingString)
         workload.setValidStatus(validStatus = self.validStatus)
         return workload
 
@@ -355,6 +356,9 @@ class StdBase(object):
 
         procTask.setSplittingAlgorithm(splitAlgo, **newSplitArgs)
         procTask.setTaskType(taskType)
+        procTask.setProcessingVersion(self.processingVersion)
+        procTask.setAcquisitionEra(self.acquisitionEra)
+        procTask.setProcessingString(self.processingString)
 
         if taskType in ["Production", 'PrivateMC'] and totalEvents != None:
             procTask.addGenerator(seeding)
@@ -782,12 +786,9 @@ class StdBase(object):
         """
 
         try:
-            processingVersion = int(schema.get("ProcessingVersion", 0))
-        except ValueError:
-            try:
-                processingVersion = int(float(schema.get("ProcessingVersion", 0)))
-            except ValueError:
-                self.raiseValidationException(msg = "Non-integer castable ProcessingVersion found")
+            procversion(str(schema.get("ProcessingVersion", 0)))
+        except AssertionError:
+            self.raiseValidationException(msg = "Non-integer castable ProcessingVersion found")
 
         performanceFields = ['TimePerEvent', 'Memory', 'SizePerEvent']
 

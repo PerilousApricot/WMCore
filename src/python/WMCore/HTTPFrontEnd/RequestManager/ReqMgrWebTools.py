@@ -13,7 +13,6 @@ from cherrypy.lib.static import serve_file
 from httplib import HTTPException
 import WMCore.Lexicon
 import cgi
-from WMCore.WMSpec.WMWorkload import WMWorkloadHelper
 import WMCore.RequestManager.RequestDB.Settings.RequestStatus             as RequestStatus
 import WMCore.RequestManager.RequestDB.Interface.Request.ChangeState      as ChangeState
 import WMCore.RequestManager.RequestDB.Interface.Request.GetRequest       as GetRequest
@@ -450,15 +449,14 @@ def buildWorkloadAndCheckIn(webApi, reqSchema, couchUrl, couchDB, wmstatUrl, clo
         raise HTTPError(400, "Error in Workload Validation: %s" % ex._message)
     
     helper = WMWorkloadHelper(request['WorkloadSpec'])
+
+    #4378 - ACDC (Resubmission) requests should inherit the Campaign ...
+    # for Resubmission request, there already is previous Campaign set
+    # this call would override it with initial request arguments where
+    # it is not specified, so would become ''
+    if not helper.getCampaign():
+        helper.setCampaign(reqSchema["Campaign"])
         
-    helper.setCampaign(reqSchema["Campaign"])
-    if "CustodialSite" in reqSchema.keys():
-        helper.setCustodialSite(siteName = reqSchema['CustodialSite'])
-    elif len(reqSchema.get("SiteWhitelist", [])) == 1:
-        # If there is only one site in the site whitelist we should
-        # set it as the custodial site.
-        # Oli says so.
-        helper.setCustodialSite(siteName = reqSchema['SiteWhitelist'][0])
     if "RunWhitelist" in reqSchema:
         helper.setRunWhitelist(reqSchema["RunWhitelist"])
         
@@ -515,6 +513,7 @@ def makeRequest(webApi, reqInputArgs, couchUrl, couchDB, wmstatUrl):
     # values in the schema definition
     
     reqSchema["Campaign"] = reqInputArgs.get("Campaign", "")
+    
     if 'ProcScenario' in reqInputArgs and 'ConfigCacheID' in reqInputArgs:
         # Use input mode to delete the unused one
         inputMode = reqInputArgs.get('inputMode', None)
@@ -556,10 +555,9 @@ def makeRequest(webApi, reqInputArgs, couchUrl, couchDB, wmstatUrl):
     for blocklist in ["BlockWhitelist", "BlockBlacklist"]:
         if blocklist in reqInputArgs:
             reqSchema[blocklist] = parseBlockList(reqInputArgs[blocklist])
-    if "DqmSequences" in reqInputArgs:
-        reqSchema["DqmSequences"] = parseStringListWithoutValidation(reqInputArgs["DqmSequences"])
-    if "IgnoredOutputModules" in reqInputArgs:
-        reqSchema["IgnoredOutputModules"] = parseStringListWithoutValidation(reqInputArgs["IgnoredOutputModules"])
+    for stringList in ["DqmSequences", "IgnoredOutputModules", "TransientOutputModules"]:
+        if stringList in reqInputArgs:
+            reqSchema[stringList] = parseStringListWithoutValidation(reqInputArgs[stringList])
 
     validate(reqSchema)
 
@@ -585,7 +583,6 @@ def requestDetails(requestName):
     schema['UnmergedLFNBase'] = str(helper.getUnmergedLFNBase())
     schema['Campaign']        = str(helper.getCampaign()) 
     schema['AcquisitionEra']  = str(helper.getAcquisitionEra())
-    schema['CustodialSite']   = str(helper.getCustodialSite())
     if schema['SoftwareVersions'] == ['DEPRECATED']:
         schema['SoftwareVersions'] = helper.getCMSSWVersions()
     return schema

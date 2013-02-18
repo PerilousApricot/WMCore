@@ -57,14 +57,13 @@ class Harvest(JobFactory):
                 myThread.logger.error(msg)
 
             # Populate a dictionary with [location][run] so we can split jobs according to those different combinations
-            for location in locSet:
-                if location not in locationDict.keys():
-                    locationDict[location] = {}
-                for run in runSet:
-                    if run.run in locationDict[location].keys():
-                        locationDict[location][run.run].append(fileInfo)
-                    else:
-                        locationDict[location][run.run] = [fileInfo]
+            if locSet not in locationDict.keys():
+                locationDict[locSet] = {}
+            for run in runSet:
+                if run.run in locationDict[locSet].keys():
+                    locationDict[locSet][run.run].append(fileInfo)
+                else:
+                    locationDict[locSet][run.run] = [fileInfo]
 
         # create separate jobs for different locations
         self.newGroup()
@@ -87,6 +86,8 @@ class Harvest(JobFactory):
                 #Check for proxy and ship it in the job if available
                 if 'X509_USER_PROXY' in os.environ:
                     self.currentJob['proxyPath'] = os.environ['X509_USER_PROXY']
+
+                self.currentJob.addBaggageParameter("runIsComplete", not fileset.open)
 
         return
 

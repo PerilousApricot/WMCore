@@ -1,3 +1,95 @@
+0.9.39 to 0.9.40:
+  - Fixes from the testing of DBS3 upload.  Pull request #4391.
+  - add script to unregister agent when agent is retired or inactive.
+    Pull request #4389. 
+  - check components are alive using pid and also thread status.  Pull
+     request #4381.
+  - Fix unit tests breakage due to Specs_t.  Pull request #4387.
+  - Get the correct times out of a report if any.  Pull request #4385.
+  - ReqMgr testing enhanced by TaskChain requests.  Pull request #4384.
+  - ReqMgr CustodialSite bug fix.  Pull request #4379.
+
+0.9.38 to 0.9.39:
+  - Display the amount of time a request has been in a particular state in
+    WMStats.  Pull request #4374.
+  - Fix the priority setting of cloned requests.  Pull request #4377.
+  - Fix the cmsRun configuration for DQM harvesting jobs.  Pull request #4371.
+
+0.9.37 to 0.9.38:
+  - Fix accounting of lumis when a run black/white list is specified for a 
+    request.  Pull request #4369.
+  - Add a column to the job table in WMStats to display the number of queued
+    jobs.  Pull request #4370.
+
+0.9.36 to 0.9.37:
+  - Give the t0-operator role writer permissions in WMStats.  Pull request
+    #4365.
+  - Fix PREP ID search in WMStats.  Pull request #4367.
+  - Retry WMStats replication when it fails.  Pull request #4362.
+  - Remove the t0wmstats dependencies.  Pull request #4359.
+  - The aborted-archived and normal-archived are final states and transitions out
+    of them should not be allowed.  Pull request #4360.
+  - Fix the EventBased splitting algorithm to work around issues with zero event
+    lumis.  Pull request #4361.
+  - Make sure that the run white and black lists gets passed to the job splitting
+    algorithms so that they can use them.  Pull request #4368.
+  - Fix the DBS3Uploader and modify it to support an upload only mode.  Kill off the
+    SQLite code in DBSBuffer and DBS3Buffer.  Pull request #4358.
+
+0.9.35 to 0.9.36:
+  - Minor ReqMgr fixes.  Pull request #4357: 
+    * Cloned requests will beging in the assignment-approved state instead
+      of new.
+    * PhEDEx subscriptions arguments have been added into the JSON request
+      template.
+  - Add the ability to not stage the output of a particular output module
+    to merged storage.  Pull request #4355.
+
+0.9.34 to 0.9.35:
+  - Add an option to the PhEDExInjector to make only replica subscriptions.  Pull
+    request #4354.
+  - Fix a bug with the handling of requests with the running-open and running-closed
+    status in WMStats.  Pull request #4353.
+  - WMStats updates - Add the ability to search by date and Prep ID,
+    improve the request detail view, add a couch status monitor, fix a 
+    bug when filtering and data is being refreshed.  Pull request #4352. 
+  - ReqMgr2 - Oracle, CouchDB database cleanup.  Pull request #4351.
+  - Update the ALCAHarvest runtime code to support the new dropbox 
+    format.  Pull request #4950.
+  - Fix EOS StageIn at CERN.  Pull request #4349.
+  - Fix the DQM Harvesting job splitter so that it properly handles sites
+    with multiple SEs.  Pull request #4348.
+  - Fix WMBSMergeBySize for sites that have multiple SEs.  Pull request
+    #4347.
+
+0.9.33 to 0.9.34:
+  - Fix sandbox creation so that is works with patch releases.  Pull request #4339.
+  - Display docstrings in RESTAPI documentation.  Pull request #4340.
+  - Fix the handling of the site parameter in the error summary when the site
+    is an empty dictionary.  Pull request #4342.
+  - Fix smart lumi splitting when running over a too big single lumi file.
+    Pull request #4334.
+  - Fix the cleanup of the workflow timestamp cache in the JobSubmitter.  Pull
+    request #4335.
+  - Remove dead code and view from the ReqMgr couchapp.  Pull request #4332.
+  - Avoid crashes on custodial PhEDEx subscriptions to non-MSS sites.  Pull
+    request #4325.
+  - Ensure that the JobSubmitter submits jobs from the oldest workflow first.
+    Pull request #4327.
+  - Add a method to WMStatsReader that reports requests sorted by state that also
+    includes a timestamp of the last state transition.  Pull request #4328.
+  - Remove dead code from the ConfigCache and clean up views.  Pull request
+    #4324.
+  - Fix WMStats so that it functions correctly when there are no jobs in a 
+    request.  Pull request #4326.
+  - Deploy WorkloadSummary with reqmon instead of ReqMgr.  Pull request #4232.
+  - Add a merged flag to the FWJR so that it's possible to calculat lumi information
+    for monitoring.  Pull request #4336.
+  - WMStats feature development, pull request #4345:
+     * Change the layout of the warning and summary box.
+     * Add more filters.
+     * Propagate more information (lumi, performance, job type)
+
 0.9.32 to 0.9.33:
   - Publish job state transition information to WMStats.  Pull request #4311.
   - Fix timeout kills in the LSF plugin.  Pull request #4322.

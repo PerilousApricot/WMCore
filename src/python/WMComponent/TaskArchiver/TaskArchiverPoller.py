@@ -378,7 +378,7 @@ class TaskArchiverPoller(BaseWorkerThread):
                     continue
     
             self.killWorkflows(wfsToDelete)
-
+        
         return
 
     def notifyWorkQueue(self, subList):
